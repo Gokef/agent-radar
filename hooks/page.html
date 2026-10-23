@@ -382,7 +382,8 @@ function buildNetwork() {
   hubTaken = taken
   hubs.clear()
   distCache = new Map()
-  for (const a of agents.values()) resetAgent(a)
+  // keep each agent's place on its ring when the window is resized
+  for (const a of agents.values()) { const ang = a.angle; resetAgent(a); if (ang !== undefined) a.angle = ang }
 }
 
 // project hubs sit on an inner ring between the stations
@@ -413,92 +414,124 @@ function distTo(target) {
   return d
 }
 
-// ===================== walkers =====================
-// A walker hops neuron to neuron. mode 'go': head to target, then roam near it.
-// 'home': roam slowly near target. 'rest': go to target and stop there.
-function walker(node) { return { node, next: node, t: 1, x: neurons[node].x, y: neurons[node].y, trail: [], alpha: 1 } }
-
-function chooseNext(w, target, mode, roam) {
-  const d = distTo(target)
-  const here = d[w.node]
-  const nb = neurons[w.node].nb
-  if (mode === 'rest' && here === 0) return w.node
-  if (here > roam) {
-    const closer = nb.filter(j => d[j] < here)
-    return closer[(Math.random() * closer.length) | 0] ?? w.node
-  }
-  const near = nb.filter(j => d[j] <= roam)
-  return near[(Math.random() * near.length) | 0] ?? w.node
-}
-
-function stepWalker(w, target, mode, speed, color, dt, fires) {
-  if (w.t >= 1) {
-    w.node = w.next
-    if (fires) { const n = neurons[w.node]; n.fire = 1; n.fireC = color }
-    w.next = chooseNext(w, target, mode, mode === 'go' ? 2 : 1)
-    w.t = w.next === w.node ? 1 : 0
-    const e = edges.get(edgeKey(w.node, w.next))
-    if (e && fires) { e.glow = 1; e.color = color }
-  }
-  if (w.next !== w.node) w.t = Math.min(1, w.t + dt * speed)
-  const a = neurons[w.node], b = neurons[w.next]
-  const t = w.t, ease = t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2
-  w.x = a.x + (b.x - a.x) * ease
-  w.y = a.y + (b.y - a.y) * ease
-  if (fires) { w.trail.push([w.x, w.y]); if (w.trail.length > 22) w.trail.shift() }
-  else if (w.trail.length) w.trail.shift()
-}
-
 // ===================== agents =====================
+// Each agent orbits its project's node instead of travelling the network, so it is
+// always easy to find. While it works it "feeds": particles flow from the node into
+// it (in the colour of the tool it is using) and the tool's station streams down to
+// the node. Small worker dots circle a busy agent; subagents ride an outer ring.
 const agents = new Map()
+let feeds = []    // particles from a project node into an agent
+let streams = []  // particles from a tool station down to a project node
+const ORBIT_SPEED = { working: 0.85, waiting: 0.22, idle: 0.12, sleeping: 0 }
+
 function resetAgent(a) {
-  const hub = hubFor(a.row.project)
-  a.main = walker(hub)
-  a.swarm = []
+  const n = neurons[hubFor(a.row.project)]
+  a.angle = (hash(a.row.id) % 628) / 100
+  a.omega = 0
+  a.x = n.x; a.y = n.y
+  a.gulp = 0
+  a.feedT = 0; a.streamT = 0
+  a.crew = []
   a.subs = []
 }
-function agentTarget(row) {
-  return row.status === 'working' ? stations[toolOf(row.tool)] : hubFor(row.project)
+
+// orbit radius: agents of one project take turns on rings further out
+function orbitOf(a) {
+  const mates = [...agents.values()].filter(b => b.row.project === a.row.project)
+  mates.sort((p, q) => (p.row.id < q.row.id ? -1 : 1))
+  const k = Math.max(0, mates.indexOf(a))
+  return 34 + k * 13
 }
 
 function updateAgent(a, dt) {
   const row = a.row
+  const hub = neurons[hubFor(row.project)]
+  const working = row.status === 'working'
   const tool = toolOf(row.tool)
   const tc = TOOLS[tool].c
-  const working = row.status === 'working'
-  const target = agentTarget(row)
-  const mode = working ? 'go' : row.status === 'sleeping' ? 'rest' : 'home'
-  const speed = working ? 2.3 : row.status === 'sleeping' ? 0.8 : row.status === 'waiting' ? 0.25 : 0.15
-  stepWalker(a.main, target, mode, speed, tc, dt, working)
 
-  // the swarm: extra dots that fly with a working agent to its station
-  const want = working ? 5 + Math.min(4, row.subagents.length * 2) : 0
-  while (a.swarm.filter(s => !s.leaving).length < want) {
-    const s = walker(a.main.node)
-    s.speed = rand(1.5, 3.2); s.leaving = false; s.alpha = 0; s.size = rand(1.6, 2.8)
-    a.swarm.push(s)
-  }
-  let extra = a.swarm.filter(s => !s.leaving).length - want
-  for (const s of a.swarm) if (extra > 0 && !s.leaving) { s.leaving = true; extra-- }
-  for (const s of a.swarm) {
-    if (s.leaving) {
-      stepWalker(s, a.main.node, 'rest', 3, tc, dt, false)
-      s.alpha -= dt * 0.8
-    } else {
-      s.alpha = Math.min(1, s.alpha + dt * 1.5)
-      stepWalker(s, target, 'go', s.speed, tc, dt, true)
+  // ease the spin up or down, so a sleeping agent glides to a stop
+  a.omega += ((ORBIT_SPEED[row.status] ?? 0.1) - a.omega) * Math.min(1, dt * 1.5)
+  a.angle += a.omega * dt
+  const R = orbitOf(a)
+  const tx = hub.x + Math.cos(a.angle) * R
+  const ty = hub.y + Math.sin(a.angle) * R * 0.82
+  a.x += (tx - a.x) * Math.min(1, dt * 5)
+  a.y += (ty - a.y) * Math.min(1, dt * 5)
+  a.gulp *= Math.pow(0.02, dt)
+
+  // feeding from the project node
+  const feedEvery = working ? 0.11 : row.status === 'waiting' ? 1.4 : 0
+  if (feedEvery) {
+    a.feedT += dt
+    while (a.feedT > feedEvery) {
+      a.feedT -= feedEvery
+      const o = Math.random() * 6.28
+      feeds.push({ a, sx: hub.x + Math.cos(o) * 12, sy: hub.y + Math.sin(o) * 12, t: 0, speed: rand(1.3, 2), color: working ? tc : '#fbbf24', size: working ? rand(1.4, 2.4) : 1.4, wob: rand(-1, 1) })
     }
   }
-  a.swarm = a.swarm.filter(s => s.alpha > 0)
 
-  // subagents: purple walkers that go to their own tool's station
-  while (a.subs.length < row.subagents.length) a.subs.push(walker(a.main.node))
+  // the tool's station streams down to the project node while the agent uses it
+  if (working && stations[tool] !== undefined) {
+    a.streamT += dt
+    while (a.streamT > 0.22) {
+      a.streamT -= 0.22
+      const st = neurons[stations[tool]]
+      st.fire = Math.max(st.fire, 0.5); st.fireC = tc
+      streams.push({ from: stations[tool], to: hubFor(row.project), t: 0, speed: rand(0.45, 0.65), color: tc, bend: rand(-0.25, 0.25) })
+    }
+  }
+
+  // worker crew: tiny dots circling a busy agent
+  const want = working ? 4 + Math.min(3, row.subagents.length) : 0
+  while (a.crew.filter(c => !c.leaving).length < want) a.crew.push({ ang: Math.random() * 6.28, r: rand(10, 15), spd: rand(2.2, 3.6) * (Math.random() < .5 ? -1 : 1), alpha: 0, size: rand(1.2, 2), leaving: false })
+  let extra = a.crew.filter(c => !c.leaving).length - want
+  for (const c of a.crew) if (extra > 0 && !c.leaving) { c.leaving = true; extra-- }
+  for (const c of a.crew) {
+    c.ang += c.spd * dt
+    c.alpha = c.leaving ? c.alpha - dt * 1.2 : Math.min(1, c.alpha + dt * 1.5)
+    c.x = a.x + Math.cos(c.ang) * c.r
+    c.y = a.y + Math.sin(c.ang) * c.r
+  }
+  a.crew = a.crew.filter(c => c.alpha > 0)
+
+  // subagents on an outer ring around the agent
+  while (a.subs.length < row.subagents.length) a.subs.push({ ang: Math.random() * 6.28 })
   a.subs.length = row.subagents.length
   a.subs.forEach((s, k) => {
-    const sa = row.subagents[k]
-    const st = sa.isActive ? stations[toolOf(sa.tool)] : a.main.node
-    stepWalker(s, st, sa.isActive ? 'go' : 'rest', sa.isActive ? 2 : 1, '#c084fc', dt, sa.isActive)
+    const on = row.subagents[k]?.isActive
+    s.ang += (on ? 1.4 : 0.3) * dt
+    s.x = a.x + Math.cos(s.ang + k * 2.1) * 22
+    s.y = a.y + Math.sin(s.ang + k * 2.1) * 22
   })
+}
+
+function drawFeeding(dt) {
+  // station -> project node: a soft curved stream
+  streams = streams.filter(p => p.t < 1)
+  for (const p of streams) {
+    p.t += dt * p.speed
+    const A = neurons[p.from], B = neurons[p.to]
+    const mx = (A.x + B.x) / 2 - (B.y - A.y) * p.bend, my = (A.y + B.y) / 2 + (B.x - A.x) * p.bend
+    const t = p.t, u = 1 - t
+    const x = u * u * A.x + 2 * u * t * mx + t * t * B.x
+    const y = u * u * A.y + 2 * u * t * my + t * t * B.y
+    ctx.fillStyle = rgba(p.color, Math.sin(t * Math.PI) * 0.75)
+    ctx.beginPath(); ctx.arc(x, y, 1.8, 0, 6.29); ctx.fill()
+    if (p.t >= 1) { B.fire = Math.max(B.fire, 0.6); B.fireC = p.color }
+  }
+  // project node -> agent: the agent "feeding"
+  feeds = feeds.filter(p => p.t < 1 && agents.has(p.a.row.id))
+  for (const p of feeds) {
+    p.t += dt * p.speed
+    const t = p.t * p.t // speeds up as it is pulled in
+    const dx = p.a.x - p.sx, dy = p.a.y - p.sy
+    const x = p.sx + dx * t - dy * 0.15 * p.wob * Math.sin(t * Math.PI)
+    const y = p.sy + dy * t + dx * 0.15 * p.wob * Math.sin(t * Math.PI)
+    ctx.fillStyle = rgba(p.color, 0.35 + 0.6 * t)
+    ctx.beginPath(); ctx.arc(x, y, p.size * (1 - t * 0.5), 0, 6.29); ctx.fill()
+    if (p.t >= 1) p.a.gulp = Math.min(1, p.a.gulp + 0.35)
+  }
 }
 
 // ===================== drawing =====================
@@ -558,12 +591,22 @@ function frame(now) {
 
   drawStations()
   drawHubs()
+  drawFeeding(dt)
 
-  // swarms and subagents under the agents
+  // worker crew and subagents around each agent
   for (const a of agents.values()) {
     const tc = TOOLS[toolOf(a.row.tool)].c
-    for (const s of a.swarm) drawDot(s, tc, s.size, s.alpha)
-    a.subs.forEach((s, k) => drawDot(s, '#c084fc', 3.2, 1, a.row.subagents[k]?.isActive))
+    for (const c of a.crew) {
+      ctx.fillStyle = rgba(tc, 0.85 * c.alpha)
+      ctx.beginPath(); ctx.arc(c.x, c.y, c.size, 0, 6.29); ctx.fill()
+    }
+    a.subs.forEach((s, k) => {
+      const on = a.row.subagents[k]?.isActive
+      ctx.fillStyle = on ? 'rgba(192,132,252,.3)' : 'rgba(71,85,105,.25)'
+      ctx.beginPath(); ctx.arc(s.x, s.y, 7, 0, 6.29); ctx.fill()
+      ctx.fillStyle = on ? '#c084fc' : '#64748b'
+      ctx.beginPath(); ctx.arc(s.x, s.y, 3.2, 0, 6.29); ctx.fill()
+    })
   }
   drawAgents()
   if (mini.ctx) drawMini()
@@ -640,7 +683,7 @@ function drawFiles(project, n, list) {
     const c = f.op === 'edit' ? TOOLS.edit.c : TOOLS.read.c
     const hot = f.ageS < 15
     if (hot) {
-      const src = f.agent.main
+      const src = f.agent
       ctx.strokeStyle = rgba(c, .5); ctx.setLineDash([3, 4])
       ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(src.x, src.y); ctx.stroke(); ctx.setLineDash([])
       ctx.shadowColor = c; ctx.shadowBlur = 14
@@ -676,30 +719,18 @@ function drawDot(w, color, r, alpha = 1, busy = true) {
 }
 
 function drawAgents() {
-  const sleepers = new Map()
   for (const a of agents.values()) {
-    const row = a.row, st = STATUS[row.status], w = a.main
+    const row = a.row, st = STATUS[row.status]
     const tc = TOOLS[toolOf(row.tool)].c
     const focus = hovered === a || highlighted === row.id || drawerId === row.id
-    let x = w.x, y = w.y
-    if (row.status === 'sleeping' && w.node === hubFor(row.project) && w.t >= 1) {
-      const k = sleepers.get(row.project) ?? 0
-      sleepers.set(row.project, k + 1)
-      const ang = Math.PI * 0.75 + k * 0.9
-      x += Math.cos(ang) * 28; y += Math.sin(ang) * 28
-    }
+    const x = a.x, y = a.y
     a.drawX = x; a.drawY = y
     const working = row.status === 'working'
-    // trail in the tool's colour
-    if (w.trail.length > 1) {
-      for (let i = 1; i < w.trail.length; i++) {
-        const [x0, y0] = w.trail[i - 1], [x1, y1] = w.trail[i]
-        ctx.strokeStyle = rgba(tc, (i / w.trail.length) * .8); ctx.lineWidth = (i / w.trail.length) * 6
-        ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke()
-      }
-      ctx.lineWidth = 1
-    }
-    const r = focus ? 8 : 6.5
+    // a faint tether to the node it orbits, brighter while feeding
+    const hubN = neurons[hubFor(row.project)]
+    ctx.strokeStyle = rgba(working ? tc : st.c, working ? 0.22 : 0.08); ctx.lineWidth = 1
+    ctx.beginPath(); ctx.moveTo(hubN.x, hubN.y); ctx.lineTo(x, y); ctx.stroke()
+    const r = (focus ? 8 : 6.5) + a.gulp * 2.6
     const g = ctx.createRadialGradient(x, y, 0, x, y, r * 4.5)
     g.addColorStop(0, rgba(working ? tc : st.c, working ? .6 : .3)); g.addColorStop(1, rgba(st.c, 0))
     ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r * 4.5, 0, 6.29); ctx.fill()
@@ -1268,7 +1299,6 @@ function applyReplay(jump) {
   }
   const rank = { working: 0, waiting: 1, idle: 2, sleeping: 3 }
   rows.sort((a, b) => rank[a.status] - rank[b.status] || b.lastAt - a.lastAt)
-  if (jump) for (const a of agents.values()) resetAgent(a)
   render(rows, T)
 }
 
