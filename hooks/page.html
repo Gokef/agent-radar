@@ -1728,7 +1728,7 @@ function applyReplay(jump) {
     if (idx < 0) continue
     const [ts, cat, desc, end] = s.events[idx]
     const age = T - ts
-    const status = age < 75e3 && !end ? 'working' : age > 15 * 60e3 ? 'sleeping' : end ? 'waiting' : 'idle'
+    const status = age < 75e3 && !end ? 'working' : age > 5 * 60e3 ? 'sleeping' : end ? 'waiting' : 'idle'
     const live = liveById.get(s.id)
     rows.push({ id: s.id, title: s.title, project: s.project, status, doing: desc, tool: cat, task: live?.task ?? '',
       ago: age < 60e3 ? 'now' : age < 3600e3 ? Math.round(age / 60e3) + 'm ago' : Math.round(age / 3600e3) + 'h ago',

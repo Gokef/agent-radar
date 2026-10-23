@@ -8,7 +8,7 @@ import { readdirSync, statSync, openSync, readSync, closeSync, existsSync } from
 const ROOT = join(homedir(), '.claude', 'projects')
 const WINDOW_MS = 6 * 60 * 60 * 1000 // show sessions touched in the last 6 hours
 const WORKING_MS = 75 * 1000 // a log written this recently means the agent is busy
-const SLEEP_MS = 15 * 60 * 1000 // no activity this long: the agent is asleep
+const SLEEP_MS = 5 * 60 * 1000 // no reply or prompt this long: the agent is asleep
 const TAIL_BYTES = 384 * 1024
 let now = Date.now()
 

@@ -8,7 +8,7 @@ A live, animated view of every Claude Code session on your computer, drawn as a 
   - **Solar:** each project is a small solar system with one planet per kind of tool. Agents rest by their sun and hop to the planet of the tool they are using, so they never leave their project.
   - **Network:** the neural network, with agents travelling to the shared tool stations.
   - **Simple:** a calm board of project panels listing each agent, its tool and what it is doing.
-- **States:** working (cyan), done (a green ✓, bright until you open it), idle, and asleep (after 15 quiet minutes it curls up at its hub with a floating "z z z").
+- **States:** working (cyan), done (a green ✓, bright until you open it), idle, and asleep (after 5 minutes with no reply or prompt it curls up at its hub with a floating "z z z").
 - **Subagents:** purple dots that go to their own stations.
 - **Files:** the files each project's agents touched orbit its hub and flash when edited.
 - **Click an agent** for its cost, tokens, lines changed and files, plus a reply box, Open folder, and a copyable `claude --resume` command.

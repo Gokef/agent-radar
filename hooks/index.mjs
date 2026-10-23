@@ -24,7 +24,7 @@ function liveSessions() {
 const KEEP_MS = 36 * 3600e3      // files and events older than this are ignored
 const SHOW_MS = 6 * 3600e3       // sessions shown on the radar
 const WORKING_MS = 75e3          // activity this recent: working
-const SLEEP_MS = 15 * 60e3       // quiet this long: asleep
+const SLEEP_MS = 5 * 60e3        // no reply or prompt this long: asleep
 const CHUNK = 8 * 1024 * 1024
 
 export const category = name => {
