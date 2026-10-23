@@ -68,7 +68,17 @@
   .drawer { zoom: var(--s); position: absolute; top: 0; right: 0; bottom: 84px; width: 420px; z-index: 7; background: rgba(8, 12, 24, .96); border-left: 1px solid var(--line);
     backdrop-filter: blur(14px); transform: translateX(105%); transition: transform .35s cubic-bezier(.2, .8, .2, 1); padding: 20px; overflow: auto; box-shadow: -20px 0 60px #0008; }
   .drawer.on { transform: none; }
-  .drawer .x { position: absolute; right: 14px; top: 12px; background: none; border: 0; color: var(--dim); font-size: 20px; }
+  .drawer .x { position: sticky; top: 0; float: right; margin: -6px -6px 0 8px; width: 34px; height: 34px; border-radius: 50%; background: #111a2e; border: 1px solid var(--line); color: var(--muted); font-size: 16px; z-index: 1; }
+  .drawer .x:hover { color: var(--text); border-color: #334155; }
+  .drawer .dmsg { max-height: 380px; overflow: auto; padding-right: 6px; }
+  a.btn { display: inline-flex; align-items: center; white-space: nowrap; text-decoration: none; }
+  .row .newpill { display: none; margin-right: 6px; padding: 1px 6px; border-radius: 999px; background: var(--wait); color: #1a1205; font-size: 9px; letter-spacing: .08em; }
+  .row.unread { border-color: #b45309; box-shadow: 0 0 0 1px #f59e0b55, 0 0 22px #f59e0b33; animation: rise .45s cubic-bezier(.2, .8, .2, 1) both, glow 2.2s ease-in-out infinite; }
+  .row.unread .newpill { display: inline-block; }
+  .row.unread .title { color: #fde68a; }
+  @keyframes glow { 50% { box-shadow: 0 0 0 1px #f59e0b88, 0 0 30px #f59e0b55; } }
+  .newstat { cursor: pointer; color: #fde68a; border-color: #b45309; background: #451a03cc; animation: breathe 2.2s ease-in-out infinite; font: inherit; font-size: 12.5px; }
+  .newstat b { color: #fde68a; }
   .drawer h3 { margin: 0 30px 4px 0; font-size: 18px; }
   .drawer .k { color: var(--dim); font-size: 11px; letter-spacing: .16em; margin: 16px 0 6px; font-weight: 700; }
   .drawer .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -132,7 +142,7 @@
   .row.working::after { content: ''; position: absolute; left: 0; bottom: 0; height: 2px; width: 30%;
     background: linear-gradient(90deg, transparent, var(--t), #fff); animation: scan 1.8s cubic-bezier(.6, 0, .4, 1) infinite; }
   @keyframes scan { from { transform: translateX(-100%) } to { transform: translateX(400%) } }
-  .zz { position: absolute; right: 12px; top: 6px; color: var(--sleep); font-size: 11px; font-weight: 700; animation: zz 3s ease-in-out infinite; }
+  .zz { position: absolute; right: 70px; top: 3px; color: var(--sleep); font-size: 11px; font-weight: 700; animation: zz 3s ease-in-out infinite; }
   @keyframes zz { 0% { opacity: 0; transform: translate(0, 6px) } 40% { opacity: 1 } 100% { opacity: 0; transform: translate(6px, -8px) } }
   .cost { color: #fde68a; font-size: 11px; flex: none; }
 
@@ -191,6 +201,7 @@
           <span class="stat"><b id="nWait" style="color:var(--wait)">0</b>waiting on you</span>
           <span class="stat"><b id="nSleep" style="color:var(--sleep)">0</b>asleep</span>
           <span class="stat"><b id="nCost" style="color:#fde68a">$0</b>spent today</span>
+          <button class="stat newstat" id="nNew" hidden title="Open the newest">🔔 <b>0</b> new</button>
         </div>
       </div>
       <div class="right">
@@ -208,7 +219,6 @@
     </header>
     <div class="legend" id="legend"></div>
     <div class="tip" id="tip"></div>
-    <div class="notes" id="notes"></div>
     <div class="drawer" id="drawer"></div>
     <div class="timeline">
       <div class="tl-ctl">
@@ -702,6 +712,14 @@ function drawAgents() {
       ctx.strokeStyle = rgba(st.c, (1 - p) * .8); ctx.lineWidth = 1.4
       ctx.beginPath(); ctx.arc(x, y, 8 + p * 18, 0, 6.29); ctx.stroke(); ctx.lineWidth = 1
     }
+    if (notes.has(row.id)) {
+      // unread notification: a small "!" bubble above the agent
+      const bob = Math.sin(clockT * 4) * 1.5
+      ctx.fillStyle = '#fbbf24'; ctx.shadowColor = '#f59e0b'; ctx.shadowBlur = 10
+      ctx.beginPath(); ctx.arc(x, y - 17 + bob, 6.5, 0, 6.29); ctx.fill(); ctx.shadowBlur = 0
+      ctx.fillStyle = '#1a1205'; ctx.font = '800 10px ui-sans-serif, Segoe UI, sans-serif'; ctx.textAlign = 'center'
+      ctx.fillText('!', x, y - 13.5 + bob)
+    }
     if (row.status === 'sleeping') {
       for (let z = 0; z < 3; z++) {
         const p = ((clockT * .35) + z / 3) % 1
@@ -761,66 +779,97 @@ canvas.addEventListener('click', ev => {
 })
 
 // ===================== detail drawer =====================
+// Built once when opened; after that only the parts that changed are updated,
+// so typing a reply or scrolling the message is never interrupted.
 const drawer = document.getElementById('drawer')
-let drawerId = null, drawerSig = ''
-function openDrawer(id) { drawerId = id; drawerSig = ''; renderDrawer(); drawer.classList.add('on'); tip.classList.remove('on') }
+let drawerId = null
+const drawerParts = {}
+function openDrawer(id) {
+  if (!agents.has(id)) return
+  drawerId = id
+  markRead(id)
+  for (const k in drawerParts) delete drawerParts[k]
+  const r = agents.get(id).row
+  drawer.innerHTML = `
+    <button class="x" id="dClose" title="Close (Esc)">✕</button>
+    <div data-part="head"></div>
+    <div data-part="ask"></div>
+    <div data-part="doing"></div>
+    <div data-part="message"></div>
+    <div data-part="numbers"></div>
+    <div data-part="files"></div>
+    <div class="k">REPLY</div>
+    <div data-part="cant"></div>
+    <textarea id="dText" placeholder="Send this session a message… (Ctrl+Enter to send)"></textarea>
+    <div class="acts">
+      <button class="primary" id="dSend">Send</button>
+      <a class="btn" id="dApp" hidden>↗ Open in Claude</a>
+      <button class="btn" id="dFolder">📂 Open folder</button>
+      <button class="btn" id="dCopy">⧉ Copy resume command</button>
+    </div>
+    <div class="status"></div>`
+  drawer.querySelector('#dClose').onclick = closeDrawer
+  const dSend = async () => {
+    const ta = drawer.querySelector('#dText')
+    if (await sendReply(id, ta.value, () => drawerId === id && drawer.querySelector('.status'))) ta.value = ''
+  }
+  drawer.querySelector('#dSend').onclick = dSend
+  drawer.querySelector('#dText').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) dSend() })
+  drawer.querySelector('#dFolder').onclick = () => post('/open-folder', { id }).catch(() => {})
+  drawer.querySelector('#dCopy').onclick = async ev => {
+    const row = agents.get(id)?.row ?? r
+    try { await navigator.clipboard.writeText(`cd "${row.cwd}"; claude --resume ${row.id}`); ev.target.textContent = '✓ Copied' } catch { ev.target.textContent = 'Copy failed' }
+  }
+  renderDrawer()
+  drawer.classList.add('on')
+  drawer.scrollTop = 0
+  tip.classList.remove('on')
+}
 function closeDrawer() { drawerId = null; drawer.classList.remove('on') }
+function setPart(name, html) {
+  if (drawerParts[name] === html) return
+  drawerParts[name] = html
+  const el = drawer.querySelector(`[data-part="${name}"]`)
+  if (el) el.innerHTML = html
+}
 function renderDrawer() {
   if (!drawerId) return
   const a = agents.get(drawerId)
   if (!a) return closeDrawer()
   const r = a.row, st = STATUS[r.status], T = TOOLS[toolOf(r.tool)]
-  const sig = JSON.stringify(r)
-  if (sig === drawerSig) return
-  const draft = drawer.querySelector('textarea')?.value ?? ''
-  const replyState = drawer.querySelector('.status')?.outerHTML ?? '<div class="status"></div>'
-  drawerSig = sig
-  drawer.innerHTML = `
-    <button class="x" id="dClose" title="Close">✕</button>
-    <h3>${esc(r.title)}</h3>
-    <div style="color:var(--muted)"><b style="color:${hue(r.project)}">${esc(r.project)}</b> · <span style="color:${st.c}">${st.label}</span> · ${esc(r.ago)}</div>
-    ${r.task ? `<div class="k">LAST ASK</div><div style="color:var(--muted)">“${esc(r.task)}”</div>` : ''}
-    <div class="k">${r.status === 'working' ? 'DOING NOW · ' + T.label.toUpperCase() : 'LAST STEP'}</div>
-    <div class="mono" style="color:${r.status === 'working' ? T.c : 'var(--muted)'};font-size:12.5px;word-break:break-word">${esc(r.doing)}</div>
-    ${r.message ? `<div class="k">LAST MESSAGE${r.messageAt ? ' · ' + new Date(r.messageAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</div>
-    <div class="md" style="max-height:360px;overflow:auto;padding-right:6px">${md(r.message)}</div>` : ''}
-    <div class="k">NUMBERS</div>
+  setPart('head', `<h3>${esc(r.title)}</h3>
+    <div style="color:var(--muted)"><b style="color:${hue(r.project)}">${esc(r.project)}</b> · <span style="color:${st.c}">${st.label}</span> · ${esc(r.ago)}</div>`)
+  setPart('ask', r.task ? `<div class="k">LAST ASK</div><div style="color:var(--muted)">“${esc(r.task)}”</div>` : '')
+  setPart('doing', `<div class="k">${r.status === 'working' ? 'DOING NOW · ' + T.label.toUpperCase() : 'LAST STEP'}</div>
+    <div class="mono" style="color:${r.status === 'working' ? T.c : 'var(--muted)'};font-size:12.5px;word-break:break-word">${esc(r.doing)}</div>`)
+  setPart('message', r.message ? `<div class="k">LAST MESSAGE${r.messageAt ? ' · ' + new Date(r.messageAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</div>
+    <div class="md dmsg">${md(r.message)}</div>` : '')
+  setPart('numbers', `<div class="k">NUMBERS</div>
     <div class="grid">
       <div class="cell"><b style="color:#fde68a">${money(r.cost || 0)}</b><span>spent this session</span></div>
       <div class="cell"><b>${kfmt(r.tokensOut || 0)}</b><span>tokens written</span></div>
       <div class="cell"><b style="color:#4ade80">+${kfmt(r.linesAdded || 0)}</b><span>lines added</span></div>
       <div class="cell"><b style="color:#f87171">−${kfmt(r.linesRemoved || 0)}</b><span>lines removed</span></div>
-    </div>
-    ${(r.files ?? []).length ? `<div class="k">FILES</div>${r.files.map(f => `<div class="file"><i style="background:${f.op === 'edit' ? TOOLS.edit.c : TOOLS.read.c}"></i><span class="mono" title="${esc(f.path)}">${esc(f.name)}</span><em>${f.op} · ${f.ageS < 60 ? 'now' : Math.round(f.ageS / 60) + 'm'}</em></div>`).join('')}` : ''}
-    ${r.subagents.length ? `<div class="k">SUBAGENTS</div>${r.subagents.map(s => `<div class="file"><i style="background:#c084fc;border-radius:50%"></i><span>${esc(s.name)}</span><em class="mono">${esc(clip(s.doing, 30))}</em></div>`).join('')}` : ''}
-    <div class="k">REPLY</div>
-    ${cantReply(r) ? `<div style="color:var(--dim);font-size:12.5px;margin-bottom:6px">${esc(cantReply(r))}</div>` : ''}
-    <textarea id="dText" placeholder="Send this session a message… (Ctrl+Enter to send)" ${cantReply(r) ? 'hidden' : ''}>${esc(draft)}</textarea>
-    <div class="acts">
-      <button class="primary" id="dSend" ${cantReply(r) ? 'hidden' : ''}>Send</button>
-      ${r.appLink ? `<a class="btn" href="${esc(r.appLink)}">↗ Open in Claude</a>` : ''}
-      <button class="btn" id="dFolder">📂 Open folder</button>
-      <button class="btn" id="dCopy">⧉ Copy resume command</button>
-    </div>
-    ${replyState}
-    <div class="note">Replies go through the Agent Radar mod, so a Claude Code session with the mod on must be open. The session gets it as a message from Agent Radar.</div>`
-  drawer.querySelector('#dClose').onclick = closeDrawer
-  const dSend = async () => {
-    const ta = drawer.querySelector('#dText')
-    if (await sendReply(r.id, ta.value, () => drawer.querySelector('.status'))) {
-      const t = drawer.querySelector('#dText'); if (t) t.value = ''
-    }
-  }
-  drawer.querySelector('#dSend').onclick = dSend
-  drawer.querySelector('#dText').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) dSend() })
-  drawer.querySelector('#dFolder').onclick = () => post('/open-folder', { id: r.id }).catch(() => {})
-  drawer.querySelector('#dCopy').onclick = async ev => {
-    try { await navigator.clipboard.writeText(`cd "${r.cwd}"; claude --resume ${r.id}`); ev.target.textContent = '✓ Copied' } catch { ev.target.textContent = 'Copy failed' }
-  }
+    </div>`)
+  setPart('files', ((r.files ?? []).length ? `<div class="k">FILES</div>${r.files.map(f => `<div class="file"><i style="background:${f.op === 'edit' ? TOOLS.edit.c : TOOLS.read.c}"></i><span class="mono" title="${esc(f.path)}">${esc(f.name)}</span><em>${f.op} · ${f.ageS < 60 ? 'now' : Math.round(f.ageS / 60) + 'm'}</em></div>`).join('')}` : '') +
+    (r.subagents.length ? `<div class="k">SUBAGENTS</div>${r.subagents.map(s => `<div class="file"><i style="background:#c084fc;border-radius:50%"></i><span>${esc(s.name)}</span><em class="mono">${esc(clip(s.doing, 30))}</em></div>`).join('')}` : ''))
+  const why = cantReply(r)
+  setPart('cant', why ? `<div style="color:var(--dim);font-size:12.5px;margin-bottom:6px">${esc(why)}</div>` : '')
+  drawer.querySelector('#dText').hidden = !!why
+  drawer.querySelector('#dSend').hidden = !!why
+  const app = drawer.querySelector('#dApp')
+  app.hidden = !r.appLink
+  if (r.appLink) app.href = r.appLink
 }
+// clicking anywhere outside the drawer closes it (the agent list and the network open another instead)
+document.addEventListener('pointerdown', ev => {
+  if (!drawerId || drawer.contains(ev.target) || ev.target.closest('.row, .modal, #net, .btns, #nNew')) return
+  closeDrawer()
+})
+
 const post = (url, data) => fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', 'x-radar': '1' }, body: JSON.stringify(data) }).then(r => r.json())
 // Sends a reply through the server and the mod. `where` is the status element,
-// or a function that finds it (the drawer redraws itself). Resolves true once delivered.
+// or a function that finds it. Resolves true once delivered.
 async function sendReply(id, text, where) {
   text = String(text ?? '').trim()
   const st = () => (typeof where === 'function' ? where() : where)
@@ -843,67 +892,37 @@ async function sendReply(id, text, where) {
 }
 
 // ===================== notifications =====================
-const notesEl = document.getElementById('notes')
-const notes = new Map()      // session id -> { el, messageAt, row }
-const dismissed = new Map()  // session id -> messageAt the person dismissed
+// A finished agent gets a NEW badge in the agent list (no pop-ups over the network).
+// Clicking it opens the drawer with the full message and a reply box.
+const notes = new Map()  // session id -> { messageAt, row }   (unread)
+const seenAt = new Map() // session id -> messageAt already read
 function showNote(r, loud) {
-  if (replay.on || dismissed.get(r.id) === r.messageAt) return
-  let n = notes.get(r.id)
+  if (replay.on || !r.messageAt || seenAt.get(r.id) === r.messageAt) return
+  const n = notes.get(r.id)
   if (n && n.messageAt === r.messageAt) return
-  if (!n) {
-    const el = document.createElement('div')
-    el.className = 'note'
-    el.innerHTML = `<div class="hd"><i></i><b></b><em></em></div><div class="who"></div>
-      <div class="msg md"></div><button class="more" hidden>Show full message</button>
-      <div class="cant" style="color:var(--dim);font-size:12px;margin:2px 0 6px" hidden></div>
-      <textarea placeholder="Reply… (Ctrl+Enter to send)"></textarea>
-      <div class="acts"><button class="send">Send</button><a class="btn app" hidden>↗ Open in Claude</a><button class="btn open">Details</button><button class="btn dis">Dismiss</button></div>
-      <div class="st"></div>`
-    n = { el }
-    notes.set(r.id, n)
-    notesEl.prepend(el)
-    const ta = el.querySelector('textarea')
-    const send = async () => {
-      if (await sendReply(r.id, ta.value, el.querySelector('.st'))) { ta.value = ''; setTimeout(() => dismissNote(r.id, true), 1600) }
-    }
-    el.querySelector('.send').onclick = send
-    ta.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) send() })
-    el.querySelector('.dis').onclick = () => dismissNote(r.id, true)
-    el.querySelector('.open').onclick = () => openDrawer(r.id)
-    el.querySelector('.more').onclick = ev => {
-      const m = el.querySelector('.msg')
-      m.classList.toggle('full')
-      ev.target.textContent = m.classList.contains('full') ? 'Show less' : 'Show full message'
-    }
-  }
-  n.messageAt = r.messageAt
-  n.row = r
-  const el = n.el
-  el.querySelector('.hd b').textContent = r.title
-  el.querySelector('.hd em').textContent = r.messageAt ? new Date(r.messageAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''
-  el.querySelector('.who').innerHTML = `<b style="color:${hue(r.project)}">${esc(r.project)}</b> · finished and is waiting for you`
-  const app = el.querySelector('.app')
-  app.hidden = !r.appLink
-  if (r.appLink) app.href = r.appLink
-  const why = cantReply(r)
-  el.querySelector('.cant').hidden = !why
-  el.querySelector('.cant').textContent = why
-  el.querySelector('textarea').hidden = !!why
-  el.querySelector('.send').hidden = !!why
-  const m = el.querySelector('.msg')
-  m.innerHTML = md(r.message || r.doing || '')
-  requestAnimationFrame(() => { el.querySelector('.more').hidden = m.scrollHeight <= m.clientHeight + 4 && !m.classList.contains('full') })
+  if (drawerId === r.id) { seenAt.set(r.id, r.messageAt); return } // already looking at it
+  notes.set(r.id, { messageAt: r.messageAt, row: r })
   if (loud) alertWaiting(r)
+  paintUnread()
+}
+function markRead(id) {
+  const n = notes.get(id)
+  if (n) seenAt.set(id, n.messageAt)
+  else { const r = agents.get(id)?.row; if (r?.messageAt) seenAt.set(id, r.messageAt) }
+  notes.delete(id)
+  paintUnread()
+}
+const newBtn = document.getElementById('nNew')
+function paintUnread() {
+  for (const [id, el] of rowsEl) el.classList.toggle('unread', notes.has(id))
+  newBtn.hidden = notes.size === 0
+  newBtn.querySelector('b').textContent = notes.size
+  document.title = notes.size ? `(${notes.size}) Agent Radar` : 'Agent Radar'
   syncMiniNotes()
 }
-function dismissNote(id, byPerson) {
-  const n = notes.get(id)
-  if (!n) return
-  if (byPerson) dismissed.set(id, n.messageAt)
-  notes.delete(id)
-  n.el.classList.add('out')
-  setTimeout(() => n.el.remove(), 350)
-  syncMiniNotes()
+newBtn.onclick = () => {
+  const newest = [...notes.entries()].sort((a, b) => b[1].messageAt - a[1].messageAt)[0]
+  if (newest) { openDrawer(newest[0]); rowsEl.get(newest[0])?.scrollIntoView({ block: 'nearest' }) }
 }
 
 // ===================== sidebar & feed =====================
@@ -922,7 +941,7 @@ function addFeed(row, text, at = Date.now()) {
 
 function rowHtml(r) {
   const st = STATUS[r.status], T = TOOLS[toolOf(r.tool)]
-  return `<span class="dot"></span><span class="title">${esc(r.title)}</span><span class="badge">${st.label}</span>
+  return `<span class="dot"></span><span class="title">${esc(r.title)}</span><span class="badge"><span class="newpill">NEW</span>${st.label}</span>
     <span class="sub"><span class="proj">${esc(r.project)}</span>${r.status === 'working' ? `<span class="tool">${T.label}</span>` : ''}<span class="doing mono">${esc(r.status === 'sleeping' ? 'asleep · ' + r.ago : r.doing)}</span>${r.cost ? `<span class="cost">${money(r.cost)}</span>` : ''}</span>
     ${r.status === 'sleeping' ? '<span class="zz">z z</span>' : ''}`
 }
@@ -946,7 +965,7 @@ function render(rows, at = Date.now()) {
       }
       // a new finished message: pop a notification card with the whole message and a reply box
       if (r.status === 'waiting' && (was.status !== 'waiting' || was.messageAt !== r.messageAt)) showNote(r, true)
-      if (r.status === 'working' && notes.has(r.id)) dismissNote(r.id, false) // it carried on by itself
+      if (r.status === 'working' && notes.has(r.id)) markRead(r.id) // it carried on by itself
       a.row = r
     }
     if (first && r.status === 'working') addFeed(r, r.doing, at)
@@ -969,6 +988,7 @@ function render(rows, at = Date.now()) {
       el.style.setProperty('--t', TOOLS[toolOf(r.tool)].c)
       el.innerHTML = html
       el.dataset.html = html
+      el.classList.toggle('unread', notes.has(r.id))
     }
     if (list.children[k] !== el) list.insertBefore(el, list.children[k] ?? null)
   })
@@ -1028,8 +1048,8 @@ function alertWaiting(r) {
       // clicking it brings the radar forward with that agent's card ready to reply
       n.onclick = () => {
         window.focus(); n.close()
-        const card = notes.get(r.id)?.el
-        if (card) { card.scrollIntoView({ block: 'nearest' }); card.querySelector('textarea').focus() } else openDrawer(r.id)
+        openDrawer(r.id)
+        setTimeout(() => drawer.querySelector('#dText')?.focus(), 300)
       }
     }
   } catch {}
@@ -1149,11 +1169,11 @@ function syncMiniNotes() {
       mini.notes.prepend(el)
       const ta = el.querySelector('textarea')
       const send = async () => {
-        if (await sendReply(id, ta.value, el.querySelector('.st'))) { ta.value = ''; setTimeout(() => dismissNote(id, true), 1600) }
+        if (await sendReply(id, ta.value, el.querySelector('.st'))) { ta.value = ''; setTimeout(() => markRead(id), 1600) }
       }
       el.querySelector('.s').onclick = send
       ta.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) send() })
-      el.querySelector('.d').onclick = () => dismissNote(id, true)
+      el.querySelector('.d').onclick = () => markRead(id)
       el.querySelector('.o').onclick = () => { const l = notes.get(id)?.row.appLink; if (l) window.location.href = l }
     }
     card.el.querySelector('.o').hidden = !n.row.appLink
