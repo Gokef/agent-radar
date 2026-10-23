@@ -28,7 +28,7 @@ const hue = (name: string) => {
 
 const STATUS = {
   working: { color: '#22d3ee', label: 'WORKING' },
-  waiting: { color: '#fbbf24', label: 'WAITING ON YOU' },
+  waiting: { color: '#34d399', label: '✓ DONE' },
   idle: { color: '#64748b', label: 'IDLE' },
   sleeping: { color: '#818cf8', label: 'ASLEEP' },
 } as const
@@ -227,7 +227,7 @@ const drawSvg = (snap: Snapshot) => {
   <circle cx="36" cy="36" r="2" fill="#67e8f9"/>
 </g>
 <text x="72" y="32" font-size="16" font-weight="800" letter-spacing="3" fill="#e2e8f0">AGENT RADAR</text>
-<text x="72" y="50" font-size="11" fill="#94a3b8"><tspan fill="#22d3ee" font-weight="700">${working}</tspan> working  ·  <tspan fill="#fbbf24" font-weight="700">${waiting}</tspan> waiting  ·  <tspan fill="#818cf8" font-weight="700">${rows.filter(r => r.status === 'sleeping').length}</tspan> asleep  ·  ${rows.length} sessions  ·  ${groups.size} projects</text>
+<text x="72" y="50" font-size="11" fill="#94a3b8"><tspan fill="#22d3ee" font-weight="700">${working}</tspan> working  ·  <tspan fill="#34d399" font-weight="700">${waiting}</tspan> done  ·  <tspan fill="#818cf8" font-weight="700">${rows.filter(r => r.status === 'sleeping').length}</tspan> asleep  ·  ${rows.length} sessions  ·  ${groups.size} projects</text>
 <circle cx="${W - 30}" cy="30" r="3.5" fill="#22c55e" class="breathe"/>
 <text x="${W - 40}" y="34" font-size="10" text-anchor="end" fill="#4ade80" letter-spacing="1">LIVE</text>
 <line x1="12" y1="68" x2="${W - 12}" y2="68" stroke="#1f2a44"/>
@@ -272,7 +272,7 @@ const scan = async ($: EngineInterface) => {
     for (const r of next.rows) {
       const old = was.get(r.id)
       if (r.id !== me && old && old !== 'waiting' && r.status === 'waiting')
-        $.ui.toast(`${r.title} (${r.project}) finished and is waiting for you. Reply at http://localhost:47474`)
+        $.ui.toast(`✓ ${r.title} (${r.project}) is done. See it at http://localhost:47474`)
     }
     // Only redraw when something visible changed, so the animations keep running smoothly.
     if (JSON.stringify(before) !== JSON.stringify(next)) await update($, snapshot, () => next)
@@ -339,8 +339,8 @@ export const register: Register = on => {
         <Box flexDirection="column">
           {snap.rows.length === 0 && <Text dimColor>Scanning…</Text>}
           {snap.rows.map(r => (
-            <Text color={r.status === 'working' ? 'cyan' : r.status === 'waiting' ? 'yellow' : r.status === 'sleeping' ? 'blue' : 'gray'}>
-              {r.status === 'working' ? '●' : r.status === 'waiting' ? '◐' : r.status === 'sleeping' ? 'z' : '○'} {r.project} · {r.title} — {r.doing}
+            <Text color={r.status === 'working' ? 'cyan' : r.status === 'waiting' ? 'green' : r.status === 'sleeping' ? 'blue' : 'gray'}>
+              {r.status === 'working' ? '●' : r.status === 'waiting' ? '✓' : r.status === 'sleeping' ? 'z' : '○'} {r.project} · {r.title} — {r.doing}
             </Text>
           ))}
         </Box>

@@ -8,11 +8,11 @@ A live, animated view of every Claude Code session on your computer, drawn as a 
   - **Solar:** each project is a small solar system with one planet per kind of tool. Agents rest by their sun and hop to the planet of the tool they are using, so they never leave their project.
   - **Network:** the neural network, with agents travelling to the shared tool stations.
   - **Simple:** a calm board of project panels listing each agent, its tool and what it is doing.
-- **States:** working (cyan), waiting on you (amber pulse), idle, and asleep (after 15 quiet minutes it curls up at its hub with a floating "z z z").
+- **States:** working (cyan), done (a green ✓, bright until you open it), idle, and asleep (after 15 quiet minutes it curls up at its hub with a floating "z z z").
 - **Subagents:** purple dots that go to their own stations.
 - **Files:** the files each project's agents touched orbit its hub and flash when edited.
 - **Click an agent** for its cost, tokens, lines changed and files, plus a reply box, Open folder, and a copyable `claude --resume` command.
-- **Notifications:** when an agent finishes, its row in the agent list glows with a NEW badge, a "!" appears over it on the network, and the header counts what is new. Click it to see the **full message** and reply. Turn on Alerts for a chime and a system notification; the Claude app also shows a toast.
+- **Done:** when an agent finishes, a green **✓ DONE** sign appears over it and on its row in the agent list, and the header counts finished agents. Click it to see the **full message** and reply. Turn on Alerts for a chime and a system notification; the Claude app also shows a toast.
 - **Reply from the overlay:** goes straight into that session. Only sessions open right now can get a reply; closed ones say so. **Open in Claude** jumps straight to that session in the app. Replies sent by the mod are blocked when the session running the radar is in auto mode; use Open in Claude there.
 - **Timeline:** activity bars for the last 6 hours. Drag or press Replay to watch the day back.
 - **Today:** agent time, spend, steps, tool mix, time per project and most-edited files.

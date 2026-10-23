@@ -9,7 +9,7 @@
     --bg: #05080f; --panel: rgba(13, 19, 34, .8); --line: #1c2740;
     --text: #e2e8f0; --muted: #94a3b8; --dim: #64748b;
     --s: 1.3;
-    --work: #22d3ee; --wait: #fbbf24; --idle: #94a3b8; --sleep: #818cf8; --sub: #c084fc;
+    --work: #22d3ee; --wait: #34d399; --idle: #94a3b8; --sleep: #818cf8; --sub: #c084fc;
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; }
@@ -77,12 +77,12 @@
   .drawer .dmsg { max-height: 380px; overflow: auto; padding-right: 6px; }
   a.btn { display: inline-flex; align-items: center; white-space: nowrap; text-decoration: none; }
   .row .newpill { display: none; margin-right: 6px; padding: 1px 6px; border-radius: 999px; background: var(--wait); color: #1a1205; font-size: 9px; letter-spacing: .08em; }
-  .row.unread { border-color: #b45309; box-shadow: 0 0 0 1px #f59e0b55, 0 0 22px #f59e0b33; animation: rise .45s cubic-bezier(.2, .8, .2, 1) both, glow 2.2s ease-in-out infinite; }
+  .row.unread { border-color: #059669; box-shadow: 0 0 0 1px #10b98155, 0 0 22px #10b98133; animation: rise .45s cubic-bezier(.2, .8, .2, 1) both, glow 2.2s ease-in-out infinite; }
   .row.unread .newpill { display: inline-block; }
-  .row.unread .title { color: #fde68a; }
-  @keyframes glow { 50% { box-shadow: 0 0 0 1px #f59e0b88, 0 0 30px #f59e0b55; } }
-  .newstat { cursor: pointer; color: #fde68a; border-color: #b45309; background: #451a03cc; animation: breathe 2.2s ease-in-out infinite; font: inherit; font-size: 12.5px; }
-  .newstat b { color: #fde68a; }
+  .row.unread .title { color: #a7f3d0; }
+  @keyframes glow { 50% { box-shadow: 0 0 0 1px #10b98188, 0 0 30px #10b98155; } }
+  .newstat { cursor: pointer; color: #a7f3d0; border-color: #047857; background: #022c22cc; animation: breathe 2.2s ease-in-out infinite; font: inherit; font-size: 12.5px; }
+  .newstat b { color: #34d399; }
   .drawer h3 { margin: 0 30px 4px 0; font-size: 18px; }
   .drawer .k { color: var(--dim); font-size: 11px; letter-spacing: .16em; margin: 16px 0 6px; font-weight: 700; }
   .drawer .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -202,10 +202,10 @@
         <h1>AGENT RADAR</h1>
         <div class="stats">
           <span class="stat"><b id="nWork" style="color:var(--work)">0</b>working</span>
-          <span class="stat"><b id="nWait" style="color:var(--wait)">0</b>waiting on you</span>
+          <span class="stat"><b id="nWait" style="color:var(--wait)">0</b>done</span>
           <span class="stat"><b id="nSleep" style="color:var(--sleep)">0</b>asleep</span>
           <span class="stat"><b id="nCost" style="color:#fde68a">$0</b>spent today</span>
-          <button class="stat newstat" id="nNew" hidden title="Open the newest">🔔 <b>0</b> new</button>
+          <button class="stat newstat" id="nNew" hidden title="Open the latest finished agent">✓ <b>0</b> done</button>
         </div>
       </div>
       <div class="right">
@@ -213,13 +213,13 @@
         <div class="live" id="live"><i></i><span>LIVE</span></div>
         <div class="btns">
           <span class="seg" id="themes"></span>
-          <button class="btn" id="bSound" title="Chime and notify when an agent needs you">🔔 Alerts</button>
+          <button class="btn" id="bSound" title="Chime and notify when an agent is done">🔔 Alerts</button>
           <button class="btn" id="bMini" title="Small always-on-top window">⧉ Mini</button>
           <button class="btn" id="bToday" title="Today's summary">📊 Today</button>
           <button class="btn" id="bSmaller" title="Smaller">A−</button>
           <button class="btn" id="bBigger" title="Bigger">A+</button>
         </div>
-        <button class="enable" id="enable" hidden>🔔 Turn on notifications so you know when an agent needs you</button>
+        <button class="enable" id="enable" hidden>🔔 Turn on notifications so you know when an agent is done</button>
       </div>
     </header>
     <div class="legend" id="legend"></div>
@@ -254,7 +254,7 @@ const hue = name => { let h = 0; for (const ch of name) h = (h * 31 + ch.charCod
 const hash = s => { let h = 7; for (const ch of s) h = (h * 33 + ch.charCodeAt(0)) >>> 0; return h }
 const STATUS = {
   working: { c: '#22d3ee', label: 'WORKING' },
-  waiting: { c: '#fbbf24', label: 'WAITING' },
+  waiting: { c: '#34d399', label: '✓ DONE' },
   idle: { c: '#94a3b8', label: 'IDLE' },
   sleeping: { c: '#818cf8', label: 'ASLEEP' },
 }
@@ -262,7 +262,7 @@ const STATUS = {
 const TOOLS = {
   think: { label: 'Thinking', glyph: '✦', c: '#22d3ee' },
   read: { label: 'Reading', glyph: '≡', c: '#60a5fa' },
-  edit: { label: 'Editing', glyph: '✎', c: '#4ade80' },
+  edit: { label: 'Editing', glyph: '✎', c: '#facc15' },
   bash: { label: 'Terminal', glyph: '>_', c: '#f472b6' },
   web: { label: 'Web', glyph: '⌕', c: '#fb923c' },
   browser: { label: 'Browser', glyph: '◫', c: '#e879f9' },
@@ -306,7 +306,7 @@ function md(src) {
 const plain = src => String(src ?? '').replace(/```[\s\S]*?```/g, ' [code] ').replace(/[*`#>]/g, '').replace(/\s+/g, ' ').trim()
 
 document.getElementById('legend').innerHTML =
-  Object.entries(STATUS).map(([k, s]) => `<span style="--c:${s.c}"><i></i>${k === 'sleeping' ? 'asleep' : k === 'waiting' ? 'waiting on you' : k}</span>`).join('') +
+  Object.entries(STATUS).map(([k, s]) => `<span style="--c:${s.c}"><i></i>${k === 'sleeping' ? 'asleep' : k === 'waiting' ? 'done' : k}</span>`).join('') +
   '<span class="sep"></span>' +
   Object.values(TOOLS).map(t => `<span style="--c:${t.c}"><i></i>${t.label}</span>`).join('')
 
@@ -318,6 +318,25 @@ const ctx = canvas.getContext('2d')
 let W = 0, H = 0, DPR = 1
 const agents = new Map()
 let hovered = null, highlighted = null, last = performance.now(), clockT = 0
+
+// The ✓ DONE sign over a finished agent: bright and bobbing until you open it, then calm.
+function drawDone(x, y, fresh) {
+  const bob = fresh ? Math.sin(clockT * 4) * 1.5 : 0
+  if (fresh) {
+    const p = (clockT * 0.8) % 1
+    ctx.strokeStyle = rgba('#34d399', (1 - p) * 0.7); ctx.lineWidth = 1.4
+    ctx.beginPath(); ctx.arc(x, y + bob, 7 + p * 10, 0, 6.29); ctx.stroke(); ctx.lineWidth = 1
+    ctx.shadowColor = '#10b981'; ctx.shadowBlur = 12
+  }
+  ctx.globalAlpha = fresh ? 1 : 0.75
+  ctx.fillStyle = '#34d399'
+  ctx.beginPath(); ctx.arc(x, y + bob, fresh ? 7 : 5.5, 0, 6.29); ctx.fill()
+  ctx.shadowBlur = 0
+  ctx.strokeStyle = '#052e1f'; ctx.lineWidth = fresh ? 1.8 : 1.5; ctx.lineCap = 'round'; ctx.lineJoin = 'round'
+  const k = fresh ? 1 : 0.8
+  ctx.beginPath(); ctx.moveTo(x - 3 * k, y + bob); ctx.lineTo(x - 0.8 * k, y + bob + 2.3 * k); ctx.lineTo(x + 3.2 * k, y + bob - 2.4 * k); ctx.stroke()
+  ctx.lineWidth = 1; ctx.lineCap = 'butt'; ctx.lineJoin = 'miter'; ctx.globalAlpha = 1
+}
 
 // ===================== theme: solar =====================
 function makeSolarTheme() {
@@ -548,11 +567,6 @@ function drawAgents() {
     ctx.beginPath(); ctx.arc(x, y, r, 0, 6.29); ctx.fill()
     if (working) { ctx.fillStyle = tc; ctx.beginPath(); ctx.arc(x, y, r * 0.55, 0, 6.29); ctx.fill() }
 
-    if (row.status === 'waiting') {
-      const p = (clockT * 0.6) % 1
-      ctx.strokeStyle = rgba(st.c, (1 - p) * 0.8); ctx.lineWidth = 1.4
-      ctx.beginPath(); ctx.arc(x, y, 7 + p * 16, 0, 6.29); ctx.stroke(); ctx.lineWidth = 1
-    }
     if (row.status === 'sleeping') {
       for (let z = 0; z < 3; z++) {
         const p = (clockT * 0.35 + z / 3) % 1
@@ -561,13 +575,7 @@ function drawAgents() {
         ctx.fillText('z', x + 7 + p * 10, y - 5 - p * 15)
       }
     }
-    if (notes.has(row.id)) {
-      const bob = Math.sin(clockT * 4) * 1.5
-      ctx.fillStyle = '#fbbf24'; ctx.shadowColor = '#f59e0b'; ctx.shadowBlur = 10
-      ctx.beginPath(); ctx.arc(x, y - 16 + bob, 6.5, 0, 6.29); ctx.fill(); ctx.shadowBlur = 0
-      ctx.fillStyle = '#1a1205'; ctx.font = '800 10px ui-sans-serif, Segoe UI, sans-serif'; ctx.textAlign = 'center'
-      ctx.fillText('!', x, y - 12.5 + bob)
-    }
+    if (row.status === 'waiting' || notes.has(row.id)) drawDone(x, y - 16, notes.has(row.id))
     if (focus) { ctx.strokeStyle = st.c; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(x, y, 13, 0, 6.29); ctx.stroke(); ctx.lineWidth = 1 }
     // names only for agents doing something (or the one you point at), to keep it calm
     if (working || row.status === 'waiting' || focus) {
@@ -969,19 +977,7 @@ function drawAgents() {
     if (working) { ctx.fillStyle = tc; ctx.beginPath(); ctx.arc(x, y, r * .55, 0, 6.29); ctx.fill() }
     ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.beginPath(); ctx.arc(x - r * .3, y - r * .3, r * .3, 0, 6.29); ctx.fill()
 
-    if (row.status === 'waiting') {
-      const p = (clockT * .6) % 1
-      ctx.strokeStyle = rgba(st.c, (1 - p) * .8); ctx.lineWidth = 1.4
-      ctx.beginPath(); ctx.arc(x, y, 8 + p * 18, 0, 6.29); ctx.stroke(); ctx.lineWidth = 1
-    }
-    if (notes.has(row.id)) {
-      // unread notification: a small "!" bubble above the agent
-      const bob = Math.sin(clockT * 4) * 1.5
-      ctx.fillStyle = '#fbbf24'; ctx.shadowColor = '#f59e0b'; ctx.shadowBlur = 10
-      ctx.beginPath(); ctx.arc(x, y - 17 + bob, 6.5, 0, 6.29); ctx.fill(); ctx.shadowBlur = 0
-      ctx.fillStyle = '#1a1205'; ctx.font = '800 10px ui-sans-serif, Segoe UI, sans-serif'; ctx.textAlign = 'center'
-      ctx.fillText('!', x, y - 13.5 + bob)
-    }
+    if (row.status === 'waiting' || notes.has(row.id)) drawDone(x, y - 16, notes.has(row.id))
     if (row.status === 'sleeping') {
       for (let z = 0; z < 3; z++) {
         const p = ((clockT * .35) + z / 3) % 1
@@ -1084,7 +1080,7 @@ function makeSimpleTheme() {
         a.drawX = s.x + 22; a.drawY = ry + 17
 
         if (focus || unread) {
-          ctx.fillStyle = unread ? 'rgba(245, 158, 11, .10)' : 'rgba(148, 163, 184, .07)'
+          ctx.fillStyle = unread ? 'rgba(52, 211, 153, .10)' : 'rgba(148, 163, 184, .07)'
           ctx.beginPath(); ctx.roundRect(s.x + 6, ry + 2, s.w - 12, ROW - 4, 10); ctx.fill()
         }
         if (i > 0) { ctx.fillStyle = 'rgba(31, 42, 68, .7)'; ctx.fillRect(s.x + 16, ry, s.w - 32, 1) }
@@ -1104,15 +1100,8 @@ function makeSimpleTheme() {
         ctx.textAlign = 'right'; ctx.font = '800 9.5px ui-sans-serif, Segoe UI, sans-serif'; ctx.fillStyle = st.c
         ctx.fillText(st.label, right, ry + 21)
         let badgeW = ctx.measureText(st.label).width
-        if (unread) {
-          ctx.font = '800 9px ui-sans-serif, Segoe UI, sans-serif'
-          const nw = ctx.measureText('NEW').width + 10
-          ctx.fillStyle = '#fbbf24'; ctx.beginPath(); ctx.roundRect(right - badgeW - nw - 6, ry + 11, nw, 13, 6.5); ctx.fill()
-          ctx.fillStyle = '#1a1205'; ctx.textAlign = 'center'; ctx.fillText('NEW', right - badgeW - 6 - nw / 2, ry + 21)
-          badgeW += nw + 8
-        }
         ctx.textAlign = 'left'; ctx.font = '650 12.5px ui-sans-serif, Segoe UI, sans-serif'
-        ctx.fillStyle = row.status === 'sleeping' ? '#64748b' : unread ? '#fde68a' : '#e2e8f0'
+        ctx.fillStyle = row.status === 'sleeping' ? '#64748b' : unread ? '#a7f3d0' : '#e2e8f0'
         ctx.fillText(fit(row.title, right - badgeW - 12 - (s.x + 36)), s.x + 36, ry + 22)
 
         // second line: tool chip + what it is doing
@@ -1341,7 +1330,7 @@ async function sendReply(id, text, where) {
 }
 
 // ===================== notifications =====================
-// A finished agent gets a NEW badge in the agent list (no pop-ups over the network).
+// A finished agent shows a ✓ DONE sign (glowing until you open it; no pop-ups over the network).
 // Clicking it opens the drawer with the full message and a reply box.
 const notes = new Map()  // session id -> { messageAt, row }   (unread)
 const seenAt = new Map() // session id -> messageAt already read
@@ -1390,7 +1379,7 @@ function addFeed(row, text, at = Date.now()) {
 
 function rowHtml(r) {
   const st = STATUS[r.status], T = TOOLS[toolOf(r.tool)]
-  return `<span class="dot"></span><span class="title">${esc(r.title)}</span><span class="badge"><span class="newpill">NEW</span>${st.label}</span>
+  return `<span class="dot"></span><span class="title">${esc(r.title)}</span><span class="badge">${st.label}</span>
     <span class="sub"><span class="proj">${esc(r.project)}</span>${r.status === 'working' ? `<span class="tool">${T.label}</span>` : ''}<span class="doing mono">${esc(r.status === 'sleeping' ? 'asleep · ' + r.ago : r.doing)}</span>${r.cost ? `<span class="cost">${money(r.cost)}</span>` : ''}</span>
     ${r.status === 'sleeping' ? '<span class="zz">z z</span>' : ''}`
 }
@@ -1410,7 +1399,7 @@ function render(rows, at = Date.now()) {
       const was = a.row
       if (was.doing !== r.doing && r.status !== 'sleeping') addFeed(r, (r.status === 'working' ? TOOLS[toolOf(r.tool)].label + ' · ' : '') + r.doing, at)
       if (was.status !== r.status) {
-        addFeed(r, r.status === 'sleeping' ? 'fell asleep' : was.status === 'sleeping' ? 'woke up' : `now ${STATUS[r.status].label.toLowerCase()}`, at)
+        addFeed(r, r.status === 'sleeping' ? 'fell asleep' : was.status === 'sleeping' ? 'woke up' : r.status === 'waiting' ? '✓ done' : `now ${STATUS[r.status].label.toLowerCase()}`, at)
       }
       // a new finished message: pop a notification card with the whole message and a reply box
       if (r.status === 'waiting' && (was.status !== 'waiting' || was.messageAt !== r.messageAt)) showNote(r, true)
@@ -1493,7 +1482,7 @@ function alertWaiting(r) {
   try {
     if ('Notification' in window && Notification.permission === 'granted') {
       const body = plain(r.message || r.doing)
-      const n = new Notification(`${r.title} needs you · ${r.project}`, { body: body.length > 300 ? body.slice(0, 299) + '…' : body, tag: r.id + ':' + r.messageAt, silent: true, requireInteraction: true })
+      const n = new Notification(`✓ ${r.title} is done · ${r.project}`, { body: body.length > 300 ? body.slice(0, 299) + '…' : body, tag: r.id + ':' + r.messageAt, silent: true, requireInteraction: true })
       // clicking it brings the radar forward with that agent's card ready to reply
       n.onclick = () => {
         window.focus(); n.close()
@@ -1557,10 +1546,10 @@ document.getElementById('bMini').onclick = async () => {
       body { margin: 0; background: #05080f; color: #e2e8f0; font: 13px/1.4 ui-sans-serif, Segoe UI, sans-serif; overflow: auto; }
       .nn { padding: 8px 10px 0; display: grid; gap: 8px; }
       .nn:empty { display: none; }
-      .c { background: #0a0f1c; border: 1px solid #78350f; border-radius: 12px; padding: 10px 12px; box-shadow: 0 0 18px #f59e0b22; animation: in .4s ease both; }
+      .c { background: #0a0f1c; border: 1px solid #065f46; border-radius: 12px; padding: 10px 12px; box-shadow: 0 0 18px #10b98122; animation: in .4s ease both; }
       @keyframes in { from { opacity: 0; transform: translateY(-6px) } }
       .c .t { font-weight: 700; display: flex; gap: 6px; align-items: center; }
-      .c .t i { width: 8px; height: 8px; border-radius: 50%; background: #fbbf24; box-shadow: 0 0 8px #fbbf24; animation: b 1.6s infinite; flex: none; }
+      .c .t i { width: 8px; height: 8px; border-radius: 50%; background: #34d399; box-shadow: 0 0 8px #34d399; animation: b 1.6s infinite; flex: none; }
       .c .p { color: #64748b; font-size: 11.5px; margin-left: 14px; }
       .c .m { max-height: 200px; overflow: auto; margin: 8px 0; font-size: 12.5px; line-height: 1.45; color: #cbd5e1; word-break: break-word; }
       .c .m .sp { height: 6px; } .c .m .h { font-weight: 700; color: #e2e8f0; } .c .m .li { padding-left: 12px; text-indent: -9px; }
@@ -1629,7 +1618,7 @@ function syncMiniNotes() {
     if (card.messageAt !== n.messageAt) {
       card.messageAt = n.messageAt
       card.el.querySelector('.t span').textContent = n.row.title
-      card.el.querySelector('.p').textContent = `${n.row.project} · waiting for you`
+      card.el.querySelector('.p').textContent = `${n.row.project} · ✓ done`
       card.el.querySelector('.m').innerHTML = md(n.row.message || n.row.doing || '')
       const why = cantReply(n.row)
       card.el.querySelector('textarea').hidden = !!why
