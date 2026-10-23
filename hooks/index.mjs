@@ -16,7 +16,7 @@ function liveSessions() {
     if (!/^\d+\.json$/.test(f)) continue // the .key files beside them hold tokens: never read
     try {
       const j = JSON.parse(readFileSync(join(LIVE_DIR, f), 'utf8'))
-      if (j.sessionId) live.set(j.sessionId, { status: j.status ?? '', name: j.name ?? '', updatedAt: j.updatedAt ?? 0 })
+      if (j.sessionId) live.set(j.sessionId, { status: j.status ?? '', name: j.name ?? '', updatedAt: j.updatedAt ?? 0, host: j.hostSessionId ?? '' })
     } catch {}
   }
   return live
@@ -225,6 +225,8 @@ export class Indexer {
         task: clip(s.lastPrompt, 120),
         prompt: s.lastPrompt,
         isLive: live.has(s.id),
+        // a desktop-app session opens with this link (the same one the app gives out)
+        appLink: /^local_[0-9a-f-]{36}$/.test(live.get(s.id)?.host ?? '') ? `claude://claude.ai/epitaxy/${live.get(s.id).host}` : '',
         message: s.lastMessage,
         messageAt: s.lastMessageTs,
         project: projectName(s.cwd),

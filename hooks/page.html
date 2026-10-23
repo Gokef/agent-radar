@@ -798,6 +798,7 @@ function renderDrawer() {
     <textarea id="dText" placeholder="Send this session a message… (Ctrl+Enter to send)" ${cantReply(r) ? 'hidden' : ''}>${esc(draft)}</textarea>
     <div class="acts">
       <button class="primary" id="dSend" ${cantReply(r) ? 'hidden' : ''}>Send</button>
+      ${r.appLink ? `<a class="btn" href="${esc(r.appLink)}">↗ Open in Claude</a>` : ''}
       <button class="btn" id="dFolder">📂 Open folder</button>
       <button class="btn" id="dCopy">⧉ Copy resume command</button>
     </div>
@@ -832,7 +833,8 @@ async function sendReply(id, text, where) {
     await new Promise(r => setTimeout(r, 1000))
     const s = await fetch('/reply-status?rid=' + rid).then(r => r.json()).catch(() => ({}))
     if ('ok' in s) {
-      say(s.ok ? '<span style="color:#4ade80">✓ Delivered to the session</span>' : `<span style="color:#f87171">Not delivered: ${esc(s.reason ?? 'unknown')}</span>`)
+      const reason = /auto mode classifier/i.test(s.reason ?? '') ? 'auto mode in the session running the radar blocks replies sent by the mod.' + blockedHint : (s.reason ?? 'unknown')
+      say(s.ok ? '<span style="color:#4ade80">✓ Delivered to the session</span>' : `<span style="color:#f87171">Not delivered: ${esc(reason)}</span>`)
       return !!s.ok
     }
   }
@@ -855,7 +857,7 @@ function showNote(r, loud) {
       <div class="msg md"></div><button class="more" hidden>Show full message</button>
       <div class="cant" style="color:var(--dim);font-size:12px;margin:2px 0 6px" hidden></div>
       <textarea placeholder="Reply… (Ctrl+Enter to send)"></textarea>
-      <div class="acts"><button class="send">Send</button><button class="btn open">Details</button><button class="btn dis">Dismiss</button></div>
+      <div class="acts"><button class="send">Send</button><a class="btn app" hidden>↗ Open in Claude</a><button class="btn open">Details</button><button class="btn dis">Dismiss</button></div>
       <div class="st"></div>`
     n = { el }
     notes.set(r.id, n)
@@ -880,6 +882,9 @@ function showNote(r, loud) {
   el.querySelector('.hd b').textContent = r.title
   el.querySelector('.hd em').textContent = r.messageAt ? new Date(r.messageAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''
   el.querySelector('.who').innerHTML = `<b style="color:${hue(r.project)}">${esc(r.project)}</b> · finished and is waiting for you`
+  const app = el.querySelector('.app')
+  app.hidden = !r.appLink
+  if (r.appLink) app.href = r.appLink
   const why = cantReply(r)
   el.querySelector('.cant').hidden = !why
   el.querySelector('.cant').textContent = why
@@ -1138,7 +1143,7 @@ function syncMiniNotes() {
       el.className = 'c'
       el.innerHTML = `<div class="t"><i></i><span></span></div><div class="p"></div><div class="m"></div>
         <textarea placeholder="Reply… (Ctrl+Enter to send)"></textarea>
-        <div class="a"><button class="s">Send</button><button class="d">Dismiss</button></div><div class="st"></div>`
+        <div class="a"><button class="s">Send</button><button class="o" hidden>↗ Open in Claude</button><button class="d">Dismiss</button></div><div class="st"></div>`
       card = { el, messageAt: null }
       mini.cards.set(id, card)
       mini.notes.prepend(el)
@@ -1149,7 +1154,9 @@ function syncMiniNotes() {
       el.querySelector('.s').onclick = send
       ta.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) send() })
       el.querySelector('.d').onclick = () => dismissNote(id, true)
+      el.querySelector('.o').onclick = () => { const l = notes.get(id)?.row.appLink; if (l) window.location.href = l }
     }
+    card.el.querySelector('.o').hidden = !n.row.appLink
     if (card.messageAt !== n.messageAt) {
       card.messageAt = n.messageAt
       card.el.querySelector('.t span').textContent = n.row.title
@@ -1176,6 +1183,8 @@ let relayId = null
 const cantReply = r => r.id === relayId
   ? 'This is the session that delivers replies, and it can’t message itself. Reply to it in the Claude app.'
   : !r.isLive ? 'This session isn’t open, so it can’t get a reply. Open it in the Claude app, or copy its resume command from Details.' : ''
+// when the safety check blocks a send, point to the button that always works
+const blockedHint = ' Use “Open in Claude” to reply there instead.'
 const tlWhen = document.getElementById('tlWhen'), bPlay = document.getElementById('bPlay'), bLive = document.getElementById('bLive'), bSpeed = document.getElementById('bSpeed')
 bSpeed.textContent = replay.speed + '×'
 bSpeed.onclick = () => { replay.speed = { 60: 120, 120: 300, 300: 600, 600: 60 }[replay.speed] ?? 120; store.set('radar.speed', replay.speed); bSpeed.textContent = replay.speed + '×' }
