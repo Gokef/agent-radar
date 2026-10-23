@@ -266,6 +266,14 @@ const scan = async ($: EngineInterface) => {
         ? { rows: JSON.parse(stdout).map(({ mtime, ...r }: AgentRow & { mtime: number }) => r), scannedAt: 1 }
         : { rows: [], error: stderr.trim() || `exit ${exitCode}`, scannedAt: 1 }
     const before = await read($, snapshot)
+    // Toast in the app when another session finishes and waits on the person.
+    const was = new Map(before.rows.map(r => [r.id, r.status]))
+    const me = await $.session.id()
+    for (const r of next.rows) {
+      const old = was.get(r.id)
+      if (r.id !== me && old && old !== 'waiting' && r.status === 'waiting')
+        $.ui.toast(`${r.title} (${r.project}) finished and is waiting for you. Reply at http://localhost:47474`)
+    }
     // Only redraw when something visible changed, so the animations keep running smoothly.
     if (JSON.stringify(before) !== JSON.stringify(next)) await update($, snapshot, () => next)
   } catch (err) {
@@ -313,6 +321,7 @@ export const register: Register = on => {
     void scan($)
     $.clock.every(POLL_MS, () => scan($))
     $.clock.every(1500, () => relayReplies($))
+    void $.session.id().then(id => $.fs.write(`${$.plugin.root}/data/relay.json`, JSON.stringify({ sessionId: id }))).catch(() => {})
     return started
   })
 

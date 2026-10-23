@@ -63,7 +63,11 @@ const server = createServer(async (req, res) => {
   }
 
   switch (url.pathname) {
-    case '/rows': return json(res, { rows: fresh().rows() })
+    case '/rows': {
+      let relayId = null
+      try { relayId = JSON.parse(readFileSync(join(here, '..', 'data', 'relay.json'), 'utf8')).sessionId } catch {}
+      return json(res, { rows: fresh().rows(), relayId })
+    }
     case '/summary': return json(res, fresh().summary())
     case '/timeline': return json(res, fresh().timeline(Math.min(24, Number(url.searchParams.get('h')) || 6)))
     case '/reply-status': {

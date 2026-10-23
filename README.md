@@ -8,10 +8,12 @@ A live, animated view of every Claude Code session on your computer, drawn as a 
 - **Subagents:** purple dots that go to their own stations.
 - **Files:** the files each project's agents touched orbit its hub and flash when edited.
 - **Click an agent** for its cost, tokens, lines changed and files, plus a reply box, Open folder, and a copyable `claude --resume` command.
-- **Alerts:** a chime and a desktop notification when an agent starts waiting on you.
+- **Notifications:** when an agent finishes, a card pops up on the radar (and in Mini) with its **full message** and a reply box. Turn on Alerts for a chime and a system notification; the Claude app also shows a toast.
+- **Reply from the overlay:** goes straight into that session. Only sessions open right now can get a reply; closed ones say so.
 - **Timeline:** activity bars for the last 6 hours. Drag or press Replay to watch the day back.
 - **Today:** agent time, spend, steps, tool mix, time per project and most-edited files.
-- **Mini:** a small always-on-top window with a live thumbnail (Chrome or Edge).
+- **Mini:** a small always-on-top window with a live thumbnail and the same reply cards (Chrome or Edge).
+- **Size:** A− / A+ scale the whole overlay (starts at 130%).
 
 It reads the session logs Claude Code keeps under `~/.claude/projects`. Nothing leaves your computer: the page is served on `127.0.0.1` only.
 

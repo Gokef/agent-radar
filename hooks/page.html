@@ -8,6 +8,7 @@
   :root {
     --bg: #05080f; --panel: rgba(13, 19, 34, .8); --line: #1c2740;
     --text: #e2e8f0; --muted: #94a3b8; --dim: #64748b;
+    --s: 1.3;
     --work: #22d3ee; --wait: #fbbf24; --idle: #94a3b8; --sleep: #818cf8; --sub: #c084fc;
   }
   * { box-sizing: border-box; }
@@ -17,11 +18,11 @@
   .mono { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; }
   button { font: inherit; color: inherit; cursor: pointer; }
 
-  .app { height: 100%; display: grid; grid-template-columns: 1fr 360px; }
+  .app { height: 100%; display: grid; grid-template-columns: 1fr calc(360px * var(--s)); }
   .stage { position: relative; min-width: 0; overflow: hidden; }
   #net { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 
-  header { position: absolute; left: 24px; top: 18px; right: 24px; display: flex; align-items: flex-start; gap: 18px; pointer-events: none; z-index: 2; }
+  header { zoom: var(--s); position: absolute; left: 24px; top: 18px; right: 24px; display: flex; align-items: flex-start; gap: 18px; pointer-events: none; z-index: 2; }
   header .btns, header .stats { pointer-events: auto; }
   h1 { margin: 0; font-size: 26px; font-weight: 800; letter-spacing: .3em;
     background: linear-gradient(90deg, #e2e8f0, #67e8f9, #c4b5fd, #e2e8f0); background-size: 300% 100%;
@@ -42,29 +43,29 @@
   .btn.on { color: #67e8f9; border-color: #155e75; background: #082f49aa; }
   @keyframes breathe { 50% { opacity: .35; } }
 
-  .legend { position: absolute; left: 24px; bottom: 96px; display: flex; flex-wrap: wrap; gap: 12px; color: var(--muted); font-size: 11.5px; z-index: 2;
+  .legend { zoom: var(--s); position: absolute; left: 24px; bottom: 96px; display: flex; flex-wrap: wrap; gap: 12px; color: var(--muted); font-size: 11.5px; z-index: 2;
     background: var(--panel); border: 1px solid var(--line); padding: 6px 14px; border-radius: 999px; backdrop-filter: blur(8px); max-width: calc(100% - 48px); }
   .legend span { display: inline-flex; align-items: center; gap: 6px; }
   .legend i { width: 9px; height: 9px; border-radius: 50%; background: var(--c); box-shadow: 0 0 8px var(--c); }
   .legend .sep { width: 1px; background: var(--line); align-self: stretch; }
 
   /* ---------- timeline ---------- */
-  .timeline { position: absolute; left: 0; right: 0; bottom: 0; height: 84px; z-index: 2; border-top: 1px solid var(--line);
+  .timeline { position: absolute; left: 0; right: 0; bottom: 0; height: calc(84px * var(--s)); z-index: 2; border-top: 1px solid var(--line);
     background: rgba(6, 10, 20, .85); backdrop-filter: blur(10px); display: grid; grid-template-columns: auto 1fr; gap: 12px; padding: 10px 16px; }
-  .tl-ctl { display: flex; flex-direction: column; gap: 6px; justify-content: center; width: 112px; }
+  .tl-ctl { zoom: var(--s); display: flex; flex-direction: column; gap: 6px; justify-content: center; width: 112px; }
   .tl-ctl .when { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
   .tl-ctl .row2 { display: flex; gap: 6px; }
-  #tl { width: 100%; height: 64px; display: block; cursor: ew-resize; border-radius: 8px; }
+  #tl { width: 100%; height: calc(64px * var(--s)); display: block; cursor: ew-resize; border-radius: 8px; }
 
   /* ---------- tooltip & drawer ---------- */
-  .tip { position: absolute; z-index: 4; pointer-events: none; width: 300px; padding: 12px 14px; border-radius: 12px;
+  .tip { zoom: var(--s); position: absolute; z-index: 4; pointer-events: none; width: 300px; padding: 12px 14px; border-radius: 12px;
     background: rgba(10, 15, 28, .95); border: 1px solid var(--line); box-shadow: 0 12px 40px #000a; opacity: 0; transform: translateY(4px); transition: opacity .15s, transform .15s; }
   .tip.on { opacity: 1; transform: none; }
   .tip .t { font-weight: 650; font-size: 14.5px; }
   .tip .p { color: var(--muted); margin-top: 3px; }
   .tip .d { margin-top: 8px; font-size: 12px; color: #67e8f9; word-break: break-word; }
 
-  .drawer { position: absolute; top: 0; right: 0; bottom: 84px; width: 380px; z-index: 5; background: rgba(8, 12, 24, .96); border-left: 1px solid var(--line);
+  .drawer { zoom: var(--s); position: absolute; top: 0; right: 0; bottom: 84px; width: 420px; z-index: 7; background: rgba(8, 12, 24, .96); border-left: 1px solid var(--line);
     backdrop-filter: blur(14px); transform: translateX(105%); transition: transform .35s cubic-bezier(.2, .8, .2, 1); padding: 20px; overflow: auto; box-shadow: -20px 0 60px #0008; }
   .drawer.on { transform: none; }
   .drawer .x { position: absolute; right: 14px; top: 12px; background: none; border: 0; color: var(--dim); font-size: 20px; }
@@ -89,7 +90,7 @@
   .modal { position: fixed; inset: 0; z-index: 10; background: #000a; display: none; place-items: center; backdrop-filter: blur(4px); }
   .modal.on { display: grid; animation: fade .25s ease both; }
   @keyframes fade { from { opacity: 0 } }
-  .sheet { width: min(760px, calc(100vw - 32px)); max-height: calc(100vh - 40px); overflow: auto; background: #0a1020; border: 1px solid var(--line); border-radius: 18px; padding: 24px 26px; position: relative; animation: pop .35s cubic-bezier(.2, .8, .2, 1) both; }
+  .sheet { zoom: var(--s); width: min(760px, calc((100vw - 32px) / var(--s))); max-height: calc((100vh - 40px) / var(--s)); overflow: auto; background: #0a1020; border: 1px solid var(--line); border-radius: 18px; padding: 24px 26px; position: relative; animation: pop .35s cubic-bezier(.2, .8, .2, 1) both; }
   @keyframes pop { from { transform: translateY(14px) scale(.98); opacity: 0 } }
   .sheet h2 { margin: 0 0 4px; font-size: 22px; letter-spacing: .08em; }
   .sheet .sub { color: var(--dim); margin-bottom: 18px; }
@@ -106,7 +107,7 @@
   .stack div { height: 100%; transition: flex-grow 1s; }
 
   /* ---------- sidebar ---------- */
-  aside { border-left: 1px solid var(--line); background: rgba(7, 11, 22, .85); backdrop-filter: blur(12px); display: grid; grid-template-rows: auto 1fr auto 38%; min-height: 0; }
+  aside { zoom: var(--s); width: 360px; height: calc(100vh / var(--s)); align-self: start; border-left: 1px solid var(--line); background: rgba(7, 11, 22, .85); backdrop-filter: blur(12px); display: grid; grid-template-rows: auto 1fr auto 38%; min-height: 0; }
   aside h2 { margin: 0; padding: 16px 18px 10px; font-size: 11px; letter-spacing: .24em; color: var(--muted); font-weight: 700; }
   .list, .feed { overflow: auto; padding: 0 12px 12px; min-height: 0; }
   .list::-webkit-scrollbar, .feed::-webkit-scrollbar, .drawer::-webkit-scrollbar { width: 7px; }
@@ -141,6 +142,40 @@
   .feed .what { color: var(--muted); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   @keyframes slide { from { opacity: 0; transform: translateX(14px); } }
 
+  /* ---------- notifications ---------- */
+  .notes { zoom: var(--s); position: absolute; top: 120px; right: 16px; width: 400px; max-width: calc(100% / var(--s) - 32px); z-index: 6; display: flex; flex-direction: column; gap: 10px;
+    max-height: calc((100% - 120px * var(--s) - 120px * var(--s)) / var(--s)); overflow: auto; padding: 2px; }
+  .notes::-webkit-scrollbar { width: 6px; } .notes::-webkit-scrollbar-thumb { background: #1f2a44; border-radius: 8px; }
+  .note { background: rgba(10, 15, 28, .97); border: 1px solid #78350f; border-radius: 14px; padding: 12px 14px; flex: none;
+    box-shadow: 0 10px 40px #000a, 0 0 24px #f59e0b1f; animation: noteIn .5s cubic-bezier(.2, .8, .2, 1) both; }
+  .note.out { animation: noteOut .35s ease both; }
+  @keyframes noteIn { from { opacity: 0; transform: translateX(40px) scale(.97); } }
+  @keyframes noteOut { to { opacity: 0; transform: translateX(40px); } }
+  .note .hd { display: flex; gap: 8px; align-items: center; }
+  .note .hd i { width: 9px; height: 9px; border-radius: 50%; background: var(--wait); box-shadow: 0 0 10px var(--wait); flex: none; animation: breathe 1.6s infinite; }
+  .note .hd b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .note .hd em { margin-left: auto; color: var(--dim); font-style: normal; font-size: 11px; flex: none; }
+  .note .who { color: var(--dim); font-size: 11.5px; margin: 2px 0 0 17px; }
+  .note .msg { max-height: 260px; overflow: auto; margin: 10px 0; padding-right: 6px; }
+  .note .msg.full { max-height: none; }
+  .note .more { background: none; border: 0; color: #67e8f9; font-size: 12px; padding: 0; margin: -4px 0 8px; }
+  .note textarea, .rbox textarea { width: 100%; min-height: 54px; resize: vertical; background: #0b1222; color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; font: inherit; font-size: 13px; }
+  .note textarea:focus, .rbox textarea:focus { outline: none; border-color: #155e75; }
+  .note .acts { display: flex; gap: 6px; margin-top: 6px; align-items: center; }
+  .note .send { background: linear-gradient(90deg, #0891b2, #7c3aed); border: 0; color: white; padding: 6px 14px; border-radius: 999px; font-weight: 600; font-size: 12.5px; }
+  .note .st { font-size: 12px; margin-top: 6px; }
+  .enable { pointer-events: auto; margin-top: 8px; padding: 6px 12px; border-radius: 999px; border: 1px solid #78350f; background: #451a03cc; color: #fde68a; font-size: 12px; animation: breathe 2.4s infinite; }
+  /* the agent's message, lightly formatted */
+  .md { font-size: 13px; line-height: 1.5; color: #cbd5e1; word-break: break-word; }
+  .md div { min-height: 1px; }
+  .md .sp { height: 8px; }
+  .md .h { font-weight: 700; color: var(--text); margin-top: 6px; }
+  .md .li { padding-left: 14px; text-indent: -10px; }
+  .md code { font-family: ui-monospace, Consolas, monospace; font-size: 12px; background: #111a2e; border: 1px solid #1c2740; border-radius: 5px; padding: 0 4px; color: #a5f3fc; }
+  .md pre { font-family: ui-monospace, Consolas, monospace; font-size: 12px; background: #0b1222; border: 1px solid #1c2740; border-radius: 8px; padding: 8px 10px; overflow: auto; white-space: pre; color: #a5f3fc; margin: 6px 0; }
+  .md b { color: var(--text); }
+  .md u { text-decoration-color: #67e8f9; }
+
   @media (max-width: 900px) { .app { grid-template-columns: 1fr; } aside { display: none; } .drawer { width: 100%; } }
 </style>
 </head>
@@ -165,11 +200,15 @@
           <button class="btn" id="bSound" title="Chime and notify when an agent needs you">🔔 Alerts</button>
           <button class="btn" id="bMini" title="Small always-on-top window">⧉ Mini</button>
           <button class="btn" id="bToday" title="Today's summary">📊 Today</button>
+          <button class="btn" id="bSmaller" title="Smaller">A−</button>
+          <button class="btn" id="bBigger" title="Bigger">A+</button>
         </div>
+        <button class="enable" id="enable" hidden>🔔 Turn on notifications so you know when an agent needs you</button>
       </div>
     </header>
     <div class="legend" id="legend"></div>
     <div class="tip" id="tip"></div>
+    <div class="notes" id="notes"></div>
     <div class="drawer" id="drawer"></div>
     <div class="timeline">
       <div class="tl-ctl">
@@ -227,6 +266,30 @@ const store = { get: (k, d) => { try { const v = localStorage.getItem(k); return
   set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)) } catch {} } }
 const timeStr = t => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 
+// overall size, changed with A− / A+
+let S = store.get('radar.scale', 1.3)
+const applyScale = () => document.documentElement.style.setProperty('--s', S)
+applyScale()
+
+// Light formatting for an agent's message: headings, bullets, bold, code. Links stay plain text.
+function md(src) {
+  let s = esc(src)
+  const blocks = []
+  s = s.replace(/```[^\n]*\n([\s\S]*?)```/g, (_, code) => { blocks.push(code.replace(/\n$/, '')); return `\u0000${blocks.length - 1}\u0000` })
+  s = s.replace(/`([^`\n]+)`/g, '<code>$1</code>')
+  s = s.replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>')
+  s = s.replace(/\[([^\]\n]+)\]\(([^)\s]+)\)/g, '<u title="$2">$1</u>')
+  s = s.split('\n').map(line => {
+    if (/^\u0000\d+\u0000$/.test(line.trim())) return line.trim()
+    if (/^#{1,6} /.test(line)) return `<div class="h">${line.replace(/^#+ /, '')}</div>`
+    if (/^\s*[-*] /.test(line)) return `<div class="li">• ${line.replace(/^\s*[-*] /, '')}</div>`
+    if (/^\s*\d+\. /.test(line)) return `<div class="li">${line.trim()}</div>`
+    return line.trim() ? `<div>${line}</div>` : '<div class="sp"></div>'
+  }).join('')
+  return s.replace(/\u0000(\d+)\u0000/g, (_, i) => `<pre>${blocks[i]}</pre>`)
+}
+const plain = src => String(src ?? '').replace(/```[\s\S]*?```/g, ' [code] ').replace(/[*`#>]/g, '').replace(/\s+/g, ' ').trim()
+
 document.getElementById('legend').innerHTML =
   Object.entries(STATUS).map(([k, s]) => `<span style="--c:${s.c}"><i></i>${k === 'sleeping' ? 'asleep' : k === 'waiting' ? 'waiting on you' : k}</span>`).join('') +
   '<span class="sep"></span>' +
@@ -258,9 +321,10 @@ function nearestFree(x, y, taken) {
 function buildNetwork() {
   const rect = canvas.getBoundingClientRect()
   DPR = window.devicePixelRatio || 1
-  W = rect.width; H = rect.height
-  canvas.width = W * DPR; canvas.height = H * DPR
-  ctx.setTransform(DPR, 0, 0, DPR, 0, 0)
+  // draw in "logical" units scaled by S, so A+ makes everything on the network bigger
+  W = rect.width / S; H = rect.height / S
+  canvas.width = rect.width * DPR; canvas.height = rect.height * DPR
+  ctx.setTransform(DPR * S, 0, 0, DPR * S, 0, 0)
 
   const top = 130, bottom = H - 180, left = 60, right = W - 60
   const cols = Math.max(5, Math.round((right - left) / 92))
@@ -674,7 +738,7 @@ function agentAt(mx, my) {
 }
 canvas.addEventListener('mousemove', ev => {
   const r = canvas.getBoundingClientRect()
-  const mx = ev.clientX - r.left, my = ev.clientY - r.top
+  const mx = (ev.clientX - r.left) / S, my = (ev.clientY - r.top) / S
   hovered = agentAt(mx, my)
   if (hovered) {
     const row = hovered.row, st = STATUS[row.status], T = TOOLS[toolOf(row.tool)]
@@ -692,7 +756,7 @@ canvas.addEventListener('mousemove', ev => {
 canvas.addEventListener('mouseleave', () => { hovered = null; tip.classList.remove('on') })
 canvas.addEventListener('click', ev => {
   const r = canvas.getBoundingClientRect()
-  const a = agentAt(ev.clientX - r.left, ev.clientY - r.top)
+  const a = agentAt((ev.clientX - r.left) / S, (ev.clientY - r.top) / S)
   if (a) openDrawer(a.row.id); else closeDrawer()
 })
 
@@ -718,6 +782,8 @@ function renderDrawer() {
     ${r.task ? `<div class="k">LAST ASK</div><div style="color:var(--muted)">“${esc(r.task)}”</div>` : ''}
     <div class="k">${r.status === 'working' ? 'DOING NOW · ' + T.label.toUpperCase() : 'LAST STEP'}</div>
     <div class="mono" style="color:${r.status === 'working' ? T.c : 'var(--muted)'};font-size:12.5px;word-break:break-word">${esc(r.doing)}</div>
+    ${r.message ? `<div class="k">LAST MESSAGE${r.messageAt ? ' · ' + new Date(r.messageAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</div>
+    <div class="md" style="max-height:360px;overflow:auto;padding-right:6px">${md(r.message)}</div>` : ''}
     <div class="k">NUMBERS</div>
     <div class="grid">
       <div class="cell"><b style="color:#fde68a">${money(r.cost || 0)}</b><span>spent this session</span></div>
@@ -728,41 +794,111 @@ function renderDrawer() {
     ${(r.files ?? []).length ? `<div class="k">FILES</div>${r.files.map(f => `<div class="file"><i style="background:${f.op === 'edit' ? TOOLS.edit.c : TOOLS.read.c}"></i><span class="mono" title="${esc(f.path)}">${esc(f.name)}</span><em>${f.op} · ${f.ageS < 60 ? 'now' : Math.round(f.ageS / 60) + 'm'}</em></div>`).join('')}` : ''}
     ${r.subagents.length ? `<div class="k">SUBAGENTS</div>${r.subagents.map(s => `<div class="file"><i style="background:#c084fc;border-radius:50%"></i><span>${esc(s.name)}</span><em class="mono">${esc(clip(s.doing, 30))}</em></div>`).join('')}` : ''}
     <div class="k">REPLY</div>
-    <textarea id="dText" placeholder="Send this session a message…">${esc(draft)}</textarea>
+    ${cantReply(r) ? `<div style="color:var(--dim);font-size:12.5px;margin-bottom:6px">${esc(cantReply(r))}</div>` : ''}
+    <textarea id="dText" placeholder="Send this session a message… (Ctrl+Enter to send)" ${cantReply(r) ? 'hidden' : ''}>${esc(draft)}</textarea>
     <div class="acts">
-      <button class="primary" id="dSend">Send</button>
+      <button class="primary" id="dSend" ${cantReply(r) ? 'hidden' : ''}>Send</button>
       <button class="btn" id="dFolder">📂 Open folder</button>
       <button class="btn" id="dCopy">⧉ Copy resume command</button>
     </div>
     ${replyState}
     <div class="note">Replies go through the Agent Radar mod, so a Claude Code session with the mod on must be open. The session gets it as a message from Agent Radar.</div>`
   drawer.querySelector('#dClose').onclick = closeDrawer
-  drawer.querySelector('#dSend').onclick = () => sendReply(r.id)
+  const dSend = async () => {
+    const ta = drawer.querySelector('#dText')
+    if (await sendReply(r.id, ta.value, () => drawer.querySelector('.status'))) {
+      const t = drawer.querySelector('#dText'); if (t) t.value = ''
+    }
+  }
+  drawer.querySelector('#dSend').onclick = dSend
+  drawer.querySelector('#dText').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) dSend() })
   drawer.querySelector('#dFolder').onclick = () => post('/open-folder', { id: r.id }).catch(() => {})
   drawer.querySelector('#dCopy').onclick = async ev => {
     try { await navigator.clipboard.writeText(`cd "${r.cwd}"; claude --resume ${r.id}`); ev.target.textContent = '✓ Copied' } catch { ev.target.textContent = 'Copy failed' }
   }
 }
 const post = (url, data) => fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', 'x-radar': '1' }, body: JSON.stringify(data) }).then(r => r.json())
-async function sendReply(id) {
-  const ta = drawer.querySelector('#dText'), st = drawer.querySelector('.status')
-  const text = ta.value.trim()
-  if (!text) return
-  st.innerHTML = '<span style="color:var(--muted)">Queued… waiting for the mod to send it</span>'
+// Sends a reply through the server and the mod. `where` is the status element,
+// or a function that finds it (the drawer redraws itself). Resolves true once delivered.
+async function sendReply(id, text, where) {
+  text = String(text ?? '').trim()
+  const st = () => (typeof where === 'function' ? where() : where)
+  const say = html => { const el = st(); if (el) el.innerHTML = html }
+  if (!text) { say('<span style="color:var(--dim)">Type a reply first.</span>'); return false }
+  say('<span style="color:var(--muted)">Sending…</span>')
   const { rid, error } = await post('/reply', { id, text }).catch(e => ({ error: String(e) }))
-  if (error) { st.innerHTML = `<span style="color:#f87171">${esc(error)}</span>`; return }
-  ta.value = ''
+  if (error) { say(`<span style="color:#f87171">${esc(error)}</span>`); return false }
   for (let i = 0; i < 30; i++) {
     await new Promise(r => setTimeout(r, 1000))
     const s = await fetch('/reply-status?rid=' + rid).then(r => r.json()).catch(() => ({}))
     if ('ok' in s) {
-      const el = drawer.querySelector('.status')
-      if (el) el.innerHTML = s.ok ? '<span style="color:#4ade80">✓ Delivered to the session</span>' : `<span style="color:#f87171">Not delivered: ${esc(s.reason ?? 'unknown')}</span>`
-      return
+      say(s.ok ? '<span style="color:#4ade80">✓ Delivered to the session</span>' : `<span style="color:#f87171">Not delivered: ${esc(s.reason ?? 'unknown')}</span>`)
+      return !!s.ok
     }
   }
-  const el = drawer.querySelector('.status')
-  if (el) el.innerHTML = '<span style="color:#fbbf24">Still waiting: is a Claude Code session with the Agent Radar mod open?</span>'
+  say('<span style="color:#fbbf24">Still waiting: is a Claude Code session with the Agent Radar mod open?</span>')
+  return false
+}
+
+// ===================== notifications =====================
+const notesEl = document.getElementById('notes')
+const notes = new Map()      // session id -> { el, messageAt, row }
+const dismissed = new Map()  // session id -> messageAt the person dismissed
+function showNote(r, loud) {
+  if (replay.on || dismissed.get(r.id) === r.messageAt) return
+  let n = notes.get(r.id)
+  if (n && n.messageAt === r.messageAt) return
+  if (!n) {
+    const el = document.createElement('div')
+    el.className = 'note'
+    el.innerHTML = `<div class="hd"><i></i><b></b><em></em></div><div class="who"></div>
+      <div class="msg md"></div><button class="more" hidden>Show full message</button>
+      <div class="cant" style="color:var(--dim);font-size:12px;margin:2px 0 6px" hidden></div>
+      <textarea placeholder="Reply… (Ctrl+Enter to send)"></textarea>
+      <div class="acts"><button class="send">Send</button><button class="btn open">Details</button><button class="btn dis">Dismiss</button></div>
+      <div class="st"></div>`
+    n = { el }
+    notes.set(r.id, n)
+    notesEl.prepend(el)
+    const ta = el.querySelector('textarea')
+    const send = async () => {
+      if (await sendReply(r.id, ta.value, el.querySelector('.st'))) { ta.value = ''; setTimeout(() => dismissNote(r.id, true), 1600) }
+    }
+    el.querySelector('.send').onclick = send
+    ta.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) send() })
+    el.querySelector('.dis').onclick = () => dismissNote(r.id, true)
+    el.querySelector('.open').onclick = () => openDrawer(r.id)
+    el.querySelector('.more').onclick = ev => {
+      const m = el.querySelector('.msg')
+      m.classList.toggle('full')
+      ev.target.textContent = m.classList.contains('full') ? 'Show less' : 'Show full message'
+    }
+  }
+  n.messageAt = r.messageAt
+  n.row = r
+  const el = n.el
+  el.querySelector('.hd b').textContent = r.title
+  el.querySelector('.hd em').textContent = r.messageAt ? new Date(r.messageAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''
+  el.querySelector('.who').innerHTML = `<b style="color:${hue(r.project)}">${esc(r.project)}</b> · finished and is waiting for you`
+  const why = cantReply(r)
+  el.querySelector('.cant').hidden = !why
+  el.querySelector('.cant').textContent = why
+  el.querySelector('textarea').hidden = !!why
+  el.querySelector('.send').hidden = !!why
+  const m = el.querySelector('.msg')
+  m.innerHTML = md(r.message || r.doing || '')
+  requestAnimationFrame(() => { el.querySelector('.more').hidden = m.scrollHeight <= m.clientHeight + 4 && !m.classList.contains('full') })
+  if (loud) alertWaiting(r)
+  syncMiniNotes()
+}
+function dismissNote(id, byPerson) {
+  const n = notes.get(id)
+  if (!n) return
+  if (byPerson) dismissed.set(id, n.messageAt)
+  notes.delete(id)
+  n.el.classList.add('out')
+  setTimeout(() => n.el.remove(), 350)
+  syncMiniNotes()
 }
 
 // ===================== sidebar & feed =====================
@@ -796,16 +932,21 @@ function render(rows, at = Date.now()) {
       resetAgent(a)
       agents.set(r.id, a)
       if (!first) addFeed(r, 'joined the network', at)
+      if (!first && r.status === 'waiting') showNote(r, true)
     } else {
       const was = a.row
       if (was.doing !== r.doing && r.status !== 'sleeping') addFeed(r, (r.status === 'working' ? TOOLS[toolOf(r.tool)].label + ' · ' : '') + r.doing, at)
       if (was.status !== r.status) {
         addFeed(r, r.status === 'sleeping' ? 'fell asleep' : was.status === 'sleeping' ? 'woke up' : `now ${STATUS[r.status].label.toLowerCase()}`, at)
-        if (r.status === 'waiting' && !replay.on) alertWaiting(r)
       }
+      // a new finished message: pop a notification card with the whole message and a reply box
+      if (r.status === 'waiting' && (was.status !== 'waiting' || was.messageAt !== r.messageAt)) showNote(r, true)
+      if (r.status === 'working' && notes.has(r.id)) dismissNote(r.id, false) // it carried on by itself
       a.row = r
     }
     if (first && r.status === 'working') addFeed(r, r.doing, at)
+    // on opening the page, show agents that finished in the last 30 minutes (quietly)
+    if (first && !replay.on && (r.status === 'waiting' || r.status === 'idle') && r.message && Date.now() - (r.messageAt || 0) < 30 * 60e3) showNote(r, false)
 
     let el = rowsEl.get(r.id)
     if (!el) {
@@ -840,17 +981,25 @@ function render(rows, at = Date.now()) {
 // ===================== alerts =====================
 let alertsOn = store.get('radar.alerts', false)
 const bSound = document.getElementById('bSound')
-const paintSound = () => { bSound.classList.toggle('on', alertsOn); bSound.textContent = alertsOn ? '🔔 Alerts on' : '🔕 Alerts off' }
+const enableBtn = document.getElementById('enable')
+const paintSound = () => {
+  bSound.classList.toggle('on', alertsOn)
+  bSound.textContent = alertsOn ? '🔔 Alerts on' : '🔕 Alerts off'
+  const needsPermission = 'Notification' in window && Notification.permission === 'default'
+  enableBtn.hidden = alertsOn && !needsPermission
+}
 paintSound()
-bSound.onclick = async () => {
-  alertsOn = !alertsOn
+async function setAlerts(on) {
+  alertsOn = on
   store.set('radar.alerts', alertsOn)
-  paintSound()
   if (alertsOn) {
     chime()
     if ('Notification' in window && Notification.permission === 'default') { try { await Notification.requestPermission() } catch {} }
   }
+  paintSound()
 }
+bSound.onclick = () => setAlerts(!alertsOn)
+enableBtn.onclick = () => setAlerts(true)
 let audio
 function chime() {
   try {
@@ -869,8 +1018,14 @@ function alertWaiting(r) {
   chime()
   try {
     if ('Notification' in window && Notification.permission === 'granted') {
-      const n = new Notification(`${r.title} needs you`, { body: `${r.project}: ${r.doing}`, tag: r.id, silent: true })
-      n.onclick = () => { window.focus(); openDrawer(r.id); n.close() }
+      const body = plain(r.message || r.doing)
+      const n = new Notification(`${r.title} needs you · ${r.project}`, { body: body.length > 300 ? body.slice(0, 299) + '…' : body, tag: r.id + ':' + r.messageAt, silent: true, requireInteraction: true })
+      // clicking it brings the radar forward with that agent's card ready to reply
+      n.onclick = () => {
+        window.focus(); n.close()
+        const card = notes.get(r.id)?.el
+        if (card) { card.scrollIntoView({ block: 'nearest' }); card.querySelector('textarea').focus() } else openDrawer(r.id)
+      }
     }
   } catch {}
 }
@@ -918,14 +1073,31 @@ document.getElementById('bMini').onclick = async () => {
   if (mini.win) { mini.win.close(); return }
   let win
   if ('documentPictureInPicture' in window) {
-    win = await documentPictureInPicture.requestWindow({ width: 340, height: 420 })
+    win = await documentPictureInPicture.requestWindow({ width: 420, height: 720 })
   } else {
-    win = window.open('', 'radar-mini', 'width=340,height=420')
+    win = window.open('', 'radar-mini', 'width=420,height=720')
     if (!win) return
   }
   win.document.body.innerHTML = `
     <style>
-      body { margin: 0; background: #05080f; color: #e2e8f0; font: 12px/1.35 ui-sans-serif, Segoe UI, sans-serif; overflow: hidden; }
+      body { margin: 0; background: #05080f; color: #e2e8f0; font: 13px/1.4 ui-sans-serif, Segoe UI, sans-serif; overflow: auto; }
+      .nn { padding: 8px 10px 0; display: grid; gap: 8px; }
+      .nn:empty { display: none; }
+      .c { background: #0a0f1c; border: 1px solid #78350f; border-radius: 12px; padding: 10px 12px; box-shadow: 0 0 18px #f59e0b22; animation: in .4s ease both; }
+      @keyframes in { from { opacity: 0; transform: translateY(-6px) } }
+      .c .t { font-weight: 700; display: flex; gap: 6px; align-items: center; }
+      .c .t i { width: 8px; height: 8px; border-radius: 50%; background: #fbbf24; box-shadow: 0 0 8px #fbbf24; animation: b 1.6s infinite; flex: none; }
+      .c .p { color: #64748b; font-size: 11.5px; margin-left: 14px; }
+      .c .m { max-height: 200px; overflow: auto; margin: 8px 0; font-size: 12.5px; line-height: 1.45; color: #cbd5e1; word-break: break-word; }
+      .c .m .sp { height: 6px; } .c .m .h { font-weight: 700; color: #e2e8f0; } .c .m .li { padding-left: 12px; text-indent: -9px; }
+      .c .m code, .c .m pre { font-family: ui-monospace, Consolas, monospace; font-size: 11.5px; color: #a5f3fc; background: #111a2e; border-radius: 4px; padding: 0 3px; }
+      .c .m pre { padding: 6px 8px; overflow: auto; white-space: pre; }
+      .c .m b { color: #e2e8f0; }
+      .c textarea { width: 100%; box-sizing: border-box; min-height: 48px; resize: vertical; background: #0b1222; color: #e2e8f0; border: 1px solid #1c2740; border-radius: 8px; padding: 6px 8px; font: inherit; font-size: 12.5px; }
+      .c .a { display: flex; gap: 6px; margin-top: 6px; align-items: center; }
+      .c button { font: inherit; font-size: 12px; cursor: pointer; border-radius: 999px; padding: 4px 12px; border: 1px solid #1c2740; background: #0d1322; color: #94a3b8; }
+      .c button.s { background: linear-gradient(90deg, #0891b2, #7c3aed); border: 0; color: white; font-weight: 600; }
+      .c .st { font-size: 11.5px; margin-top: 4px; }
       canvas { width: 100%; height: 190px; display: block; border-bottom: 1px solid #1c2740; }
       .l { padding: 8px 10px; display: grid; gap: 6px; }
       .r { display: grid; grid-template-columns: 10px 1fr; gap: 0 8px; align-items: center; }
@@ -936,13 +1108,15 @@ document.getElementById('bMini').onclick = async () => {
       .r.working span { color: var(--t); }
       @keyframes b { 50% { opacity: .35 } }
     </style>
-    <canvas id="m"></canvas><div class="l" id="l"></div>`
+    <canvas id="m"></canvas><div class="nn" id="nn"></div><div class="l" id="l"></div>`
   win.document.title = 'Agent Radar'
   const c = win.document.getElementById('m')
   mini.win = win; mini.ctx = c.getContext('2d'); mini.canvas = c; mini.list = win.document.getElementById('l')
+  mini.notes = win.document.getElementById('nn'); mini.cards = new Map()
   updateMiniList([...agents.values()].map(a => a.row))
+  syncMiniNotes()
   document.getElementById('bMini').classList.add('on')
-  win.addEventListener('pagehide', () => { mini.win = mini.ctx = mini.list = null; document.getElementById('bMini').classList.remove('on') })
+  win.addEventListener('pagehide', () => { mini.win = mini.ctx = mini.list = mini.notes = null; document.getElementById('bMini').classList.remove('on') })
 }
 function drawMini() {
   const c = mini.canvas
@@ -951,6 +1125,42 @@ function drawMini() {
   const k = Math.min(c.width / canvas.width, c.height / canvas.height)
   mini.ctx.fillStyle = '#05080f'; mini.ctx.fillRect(0, 0, c.width, c.height)
   mini.ctx.drawImage(canvas, (c.width - canvas.width * k) / 2, (c.height - canvas.height * k) / 2, canvas.width * k, canvas.height * k)
+}
+// The same notification cards in the mini window, each with its own reply box.
+function syncMiniNotes() {
+  if (!mini.notes) return
+  const doc = mini.win.document
+  for (const [id, card] of mini.cards) if (!notes.has(id)) { card.el.remove(); mini.cards.delete(id) }
+  for (const [id, n] of notes) {
+    let card = mini.cards.get(id)
+    if (!card) {
+      const el = doc.createElement('div')
+      el.className = 'c'
+      el.innerHTML = `<div class="t"><i></i><span></span></div><div class="p"></div><div class="m"></div>
+        <textarea placeholder="Reply… (Ctrl+Enter to send)"></textarea>
+        <div class="a"><button class="s">Send</button><button class="d">Dismiss</button></div><div class="st"></div>`
+      card = { el, messageAt: null }
+      mini.cards.set(id, card)
+      mini.notes.prepend(el)
+      const ta = el.querySelector('textarea')
+      const send = async () => {
+        if (await sendReply(id, ta.value, el.querySelector('.st'))) { ta.value = ''; setTimeout(() => dismissNote(id, true), 1600) }
+      }
+      el.querySelector('.s').onclick = send
+      ta.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) send() })
+      el.querySelector('.d').onclick = () => dismissNote(id, true)
+    }
+    if (card.messageAt !== n.messageAt) {
+      card.messageAt = n.messageAt
+      card.el.querySelector('.t span').textContent = n.row.title
+      card.el.querySelector('.p').textContent = `${n.row.project} · waiting for you`
+      card.el.querySelector('.m').innerHTML = md(n.row.message || n.row.doing || '')
+      const why = cantReply(n.row)
+      card.el.querySelector('textarea').hidden = !!why
+      card.el.querySelector('.s').hidden = !!why
+      card.el.querySelector('.st').textContent = why
+    }
+  }
 }
 function updateMiniList(rows) {
   if (!mini.list) return
@@ -961,6 +1171,11 @@ function updateMiniList(rows) {
 const tl = document.getElementById('tl'), tctx = tl.getContext('2d')
 const replay = { on: false, playing: false, t: 0, speed: store.get('radar.speed', 120), data: null }
 let lastRows = []
+let relayId = null
+// why a session can't take a reply right now, or '' when it can
+const cantReply = r => r.id === relayId
+  ? 'This is the session that delivers replies, and it can’t message itself. Reply to it in the Claude app.'
+  : !r.isLive ? 'This session isn’t open, so it can’t get a reply. Open it in the Claude app, or copy its resume command from Details.' : ''
 const tlWhen = document.getElementById('tlWhen'), bPlay = document.getElementById('bPlay'), bLive = document.getElementById('bLive'), bSpeed = document.getElementById('bSpeed')
 bSpeed.textContent = replay.speed + '×'
 bSpeed.onclick = () => { replay.speed = { 60: 120, 120: 300, 300: 600, 600: 60 }[replay.speed] ?? 120; store.set('radar.speed', replay.speed); bSpeed.textContent = replay.speed + '×' }
@@ -1086,7 +1301,9 @@ tl.addEventListener('pointerup', () => { dragging = false; paintReplay() })
 const liveEl = document.getElementById('live')
 async function poll() {
   try {
-    const { rows } = await fetch('/rows', { cache: 'no-store' }).then(r => r.json())
+    const data = await fetch('/rows', { cache: 'no-store' }).then(r => r.json())
+    const rows = data.rows
+    relayId = data.relayId ?? null
     lastRows = rows
     if (!replay.on) render(rows)
     liveEl.classList.remove('off')
@@ -1101,6 +1318,14 @@ async function pollSummary() {
 }
 
 window.addEventListener('resize', () => { buildNetwork(); drawTimeline() })
+const resize = step => {
+  S = Math.round(Math.max(0.8, Math.min(2.2, S + step)) * 10) / 10
+  store.set('radar.scale', S)
+  applyScale()
+  requestAnimationFrame(() => { buildNetwork(); drawTimeline() })
+}
+document.getElementById('bBigger').onclick = () => resize(0.1)
+document.getElementById('bSmaller').onclick = () => resize(-0.1)
 buildNetwork()
 poll(); setInterval(poll, 2000)
 pollSummary(); setInterval(pollSummary, 30e3)

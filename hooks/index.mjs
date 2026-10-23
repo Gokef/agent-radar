@@ -3,9 +3,24 @@
 // the radar can show today's stats and replay the last hours cheaply.
 import { homedir } from 'node:os'
 import { join, basename } from 'node:path'
-import { readdirSync, statSync, openSync, readSync, closeSync, existsSync } from 'node:fs'
+import { readdirSync, readFileSync, statSync, openSync, readSync, closeSync, existsSync } from 'node:fs'
 
 const ROOT = join(homedir(), '.claude', 'projects')
+// Running sessions register themselves here (one <pid>.json each); only those can receive a reply.
+const LIVE_DIR = join(homedir(), '.claude', 'sessions')
+function liveSessions() {
+  const live = new Map()
+  let files = []
+  try { files = readdirSync(LIVE_DIR) } catch { return live }
+  for (const f of files) {
+    if (!/^\d+\.json$/.test(f)) continue // the .key files beside them hold tokens: never read
+    try {
+      const j = JSON.parse(readFileSync(join(LIVE_DIR, f), 'utf8'))
+      if (j.sessionId) live.set(j.sessionId, { status: j.status ?? '', name: j.name ?? '', updatedAt: j.updatedAt ?? 0 })
+    } catch {}
+  }
+  return live
+}
 const KEEP_MS = 36 * 3600e3      // files and events older than this are ignored
 const SHOW_MS = 6 * 3600e3       // sessions shown on the radar
 const WORKING_MS = 75e3          // activity this recent: working
@@ -54,6 +69,7 @@ const newState = (id, path, parent) => ({
   id, path, parent, offset: 0, rest: '', cwd: '', title: '', lastPrompt: '', lastTs: 0,
   doing: '', tool: 'other', isEndTurn: false, cost: 0, tokensOut: 0, tokensIn: 0,
   linesAdded: 0, linesRemoved: 0, files: new Map(), events: [], mtime: 0,
+  lastMessage: '', lastMsgId: '', lastMessageTs: 0,
 })
 
 function ingest(s, e) {
@@ -94,6 +110,11 @@ function ingest(s, e) {
       } else if (c.type === 'text' && c.text?.trim()) {
         const end = msg.stop_reason === 'end_turn' ? 1 : 0
         const desc = clip(c.text, 90)
+        // keep the whole last message the agent wrote (it can span several lines of the log)
+        if (msg.id !== s.lastMsgId) { s.lastMsgId = msg.id; s.lastMessage = '' }
+        s.lastMessage = (s.lastMessage ? s.lastMessage + '\n\n' : '') + c.text.trim()
+        if (s.lastMessage.length > 20000) s.lastMessage = s.lastMessage.slice(0, 20000) + '\n\n…'
+        s.lastMessageTs = ts
         s.events.push([ts, 'think', desc, end])
         s.doing = desc; s.tool = 'think'; s.isEndTurn = !!end
       }
@@ -103,7 +124,7 @@ function ingest(s, e) {
     if (t) {
       s.events.push([ts, 'user', clip(t.text, 90), 0])
       s.isEndTurn = false
-      if (!s.lastPrompt) s.lastPrompt = clip(t.text, 200)
+      s.lastPrompt = t.text.length > 4000 ? t.text.slice(0, 4000) + '…' : t.text
     }
   }
 }
@@ -179,6 +200,7 @@ export class Indexer {
     const now = Date.now()
     const all = [...this.sessions.values()]
     const rows = []
+    const live = liveSessions()
     for (const s of all) {
       if (s.parent) continue
       const lastAt = s.lastTs || s.mtime
@@ -201,6 +223,10 @@ export class Indexer {
         id: s.id,
         title: clip(s.title || s.lastPrompt || 'Untitled session', 40),
         task: clip(s.lastPrompt, 120),
+        prompt: s.lastPrompt,
+        isLive: live.has(s.id),
+        message: s.lastMessage,
+        messageAt: s.lastMessageTs,
         project: projectName(s.cwd),
         cwd: s.cwd,
         status,
