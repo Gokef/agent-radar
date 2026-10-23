@@ -4,7 +4,10 @@ A live, animated view of every Claude Code session on your computer, drawn as a 
 
 - **Project hubs:** each project is a big glowing neuron, with a gold ring showing how much its sessions have cost.
 - **Tool stations:** Thinking, Reading, Editing, Terminal, Web, Browser, Agents, Working (planning and task updates) and Tools. The station an agent is using lights up and streams down to its project.
-- **Orbits:** each agent circles its own project node instead of travelling the network, so it is easy to follow. While it works it feeds: particles in the tool's colour flow from the node into it, it pulses as it takes them in, and a small crew of dots circles it.
+- **Themes** (switch in the header, remembered):
+  - **Solar:** each project is a small solar system with one planet per kind of tool. Agents rest by their sun and hop to the planet of the tool they are using, so they never leave their project.
+  - **Network:** the neural network, with agents travelling to the shared tool stations.
+  - **Simple:** a calm board of project panels listing each agent, its tool and what it is doing.
 - **States:** working (cyan), waiting on you (amber pulse), idle, and asleep (after 15 quiet minutes it curls up at its hub with a floating "z z z").
 - **Subagents:** purple dots that go to their own stations.
 - **Files:** the files each project's agents touched orbit its hub and flash when edited.

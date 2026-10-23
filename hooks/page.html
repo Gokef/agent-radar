@@ -41,6 +41,10 @@
   .btn { padding: 5px 11px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); font-size: 12px; color: var(--muted); transition: border-color .2s, color .2s, background .2s; }
   .btn:hover { border-color: #334155; color: var(--text); }
   .btn.on { color: #67e8f9; border-color: #155e75; background: #082f49aa; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; background: var(--panel); padding: 2px; gap: 2px; }
+  .seg button { border: 0; background: none; color: var(--muted); font-size: 12px; padding: 3px 10px; border-radius: 999px; transition: background .2s, color .2s; }
+  .seg button:hover { color: var(--text); }
+  .seg button.on { background: linear-gradient(90deg, #0e7490, #6d28d9); color: white; }
   @keyframes breathe { 50% { opacity: .35; } }
 
   .legend { zoom: var(--s); position: absolute; left: 24px; bottom: 96px; display: flex; flex-wrap: wrap; gap: 12px; color: var(--muted); font-size: 11.5px; z-index: 2;
@@ -208,6 +212,7 @@
         <div class="clock" id="clock">--:--</div>
         <div class="live" id="live"><i></i><span>LIVE</span></div>
         <div class="btns">
+          <span class="seg" id="themes"></span>
           <button class="btn" id="bSound" title="Chime and notify when an agent needs you">🔔 Alerts</button>
           <button class="btn" id="bMini" title="Small always-on-top window">⧉ Mini</button>
           <button class="btn" id="bToday" title="Today's summary">📊 Today</button>
@@ -305,10 +310,283 @@ document.getElementById('legend').innerHTML =
   '<span class="sep"></span>' +
   Object.values(TOOLS).map(t => `<span style="--c:${t.c}"><i></i>${t.label}</span>`).join('')
 
-// ===================== the neural network =====================
+// ===================== themes =====================
+// The drawing is swappable: Solar, Neural network or Simple. Each theme keeps its own
+// state and draws the same agents; the rest of the page doesn't care which one is on.
 const canvas = document.getElementById('net')
 const ctx = canvas.getContext('2d')
 let W = 0, H = 0, DPR = 1
+const agents = new Map()
+let hovered = null, highlighted = null, last = performance.now(), clockT = 0
+
+// ===================== theme: solar =====================
+function makeSolarTheme() {
+// Each project is a small solar system: its sun in the middle and one planet per kind
+// of tool around it. An agent rests by its sun while it waits or sleeps, and hops to the
+// planet of the tool it is using while it works, so it never leaves its own project.
+const PLANETS = ['think', 'read', 'edit', 'bash', 'web', 'browser', 'agent', 'work', 'other']
+const systems = new Map()  // project -> { x, y, R, tx, ty, tR, spin, dim, flash }
+const projectOrder = []    // first-seen order, so systems don't swap places
+let stars = []
+
+function build() {
+  stars = Array.from({ length: Math.round((W * H) / 2400) }, () => ({ x: Math.random() * W, y: Math.random() * H, r: Math.random() * 1.1 + 0.2, p: Math.random() * 6.28, s: rand(0.4, 1.4) }))
+  layoutSystems(true)
+}
+
+function layoutSystems(snap) {
+  const all = [...agents.values()]
+  const projects = projectOrder.filter(p => all.some(a => a.row.project === p))
+  const top = 125, bottom = H - 150, left = 30, right = W - 30
+  const n = Math.max(1, projects.length)
+  const aspect = (right - left) / Math.max(1, bottom - top)
+  const cols = Math.min(n, Math.max(1, Math.round(Math.sqrt(n * aspect))))
+  const rows = Math.ceil(n / cols)
+  const cw = (right - left) / cols, ch = (bottom - top) / rows
+  const baseR = Math.max(50, Math.min(150, Math.min(cw, ch * 1.1) * 0.36))
+  projects.forEach((p, i) => {
+    const r = Math.floor(i / cols), c = i % cols
+    const inRow = r === rows - 1 ? n - r * cols : cols
+    const offset = ((cols - inRow) * cw) / 2 // centre a short last row
+    const list = all.filter(a => a.row.project === p)
+    const busy = list.some(a => a.row.status === 'working' || a.row.status === 'waiting')
+    let s = systems.get(p)
+    if (!s) { s = { spin: (hash(p) % 628) / 100, flash: {} }; systems.set(p, s); snap = true }
+    s.tx = left + offset + cw * (c + 0.5)
+    s.ty = top + ch * (r + 0.5)
+    s.tR = baseR * (busy ? 1 : 0.7)
+    s.dim = !busy
+    if (snap || s.R === undefined) { s.x = s.tx; s.y = s.ty; s.R = s.tR }
+  })
+  for (const p of [...systems.keys()]) if (!projects.includes(p)) systems.delete(p)
+}
+
+function planetPos(s, tool) {
+  const k = Math.max(0, PLANETS.indexOf(tool))
+  const a = s.spin - Math.PI / 2 + (k / PLANETS.length) * Math.PI * 2
+  return { x: s.x + Math.cos(a) * s.R, y: s.y + Math.sin(a) * s.R * 0.86 }
+}
+const sunRadius = s => Math.max(9, s.R * 0.14)
+
+function resetAgent(a) {
+  if (!projectOrder.includes(a.row.project)) projectOrder.push(a.row.project)
+  layoutSystems(false)
+  const s = systems.get(a.row.project)
+  a.x = s ? s.x : W / 2; a.y = s ? s.y : H / 2
+  a.pang = (hash(a.row.id) % 628) / 100
+  a.home = a.pang
+  a.trail = []
+  a.crew = []
+  a.subs = []
+  a.tool = null
+}
+
+function updateAgent(a, dt) {
+  const row = a.row
+  const s = systems.get(row.project)
+  if (!s) return
+  const working = row.status === 'working'
+  const tool = toolOf(row.tool)
+  let tx, ty
+  if (working) {
+    if (a.tool !== tool) { a.tool = tool; s.flash[tool] = 1 } // planet lights up as the agent arrives
+    // circle the planet; agents sharing a planet take different rings
+    const mates = [...agents.values()].filter(b => b.row.project === row.project && b.row.status === 'working' && toolOf(b.row.tool) === tool)
+    const k = Math.max(0, mates.indexOf(a))
+    a.pang += dt * 2.4
+    const p = planetPos(s, tool)
+    const r = 13 + k * 6
+    tx = p.x + Math.cos(a.pang) * r; ty = p.y + Math.sin(a.pang) * r
+  } else {
+    a.tool = null
+    // rest beside the sun: waiting drifts slowly, sleeping stays put
+    a.home += dt * (row.status === 'waiting' ? 0.25 : row.status === 'idle' ? 0.1 : 0)
+    const r = sunRadius(s) + 14 + (hash(row.id) % 3) * 7
+    tx = s.x + Math.cos(a.home) * r; ty = s.y + Math.sin(a.home) * r * 0.86
+  }
+  const k = Math.min(1, dt * (working ? 5 : 3))
+  a.x += (tx - a.x) * k; a.y += (ty - a.y) * k
+  const moving = Math.hypot(tx - a.x, ty - a.y) > 6
+  if (moving) { a.trail.push([a.x, a.y]); if (a.trail.length > 14) a.trail.shift() } else if (a.trail.length) a.trail.shift()
+
+  // a few tiny crew dots circle a busy agent
+  const want = working ? 3 + Math.min(3, row.subagents.length) : 0
+  while (a.crew.filter(c => !c.leaving).length < want) a.crew.push({ ang: Math.random() * 6.28, r: rand(8, 11), spd: rand(2.5, 4) * (Math.random() < 0.5 ? -1 : 1), alpha: 0, size: rand(1, 1.6), leaving: false })
+  let extra = a.crew.filter(c => !c.leaving).length - want
+  for (const c of a.crew) if (extra > 0 && !c.leaving) { c.leaving = true; extra-- }
+  for (const c of a.crew) {
+    c.ang += c.spd * dt
+    c.alpha = c.leaving ? c.alpha - dt * 1.5 : Math.min(1, c.alpha + dt * 1.5)
+    c.x = a.x + Math.cos(c.ang) * c.r; c.y = a.y + Math.sin(c.ang) * c.r
+  }
+  a.crew = a.crew.filter(c => c.alpha > 0)
+
+  // subagents: small purple moons
+  while (a.subs.length < row.subagents.length) a.subs.push({ ang: Math.random() * 6.28 })
+  a.subs.length = row.subagents.length
+  a.subs.forEach((m, i) => {
+    m.ang += (row.subagents[i]?.isActive ? 1.6 : 0.3) * dt
+    m.x = a.x + Math.cos(m.ang + i * 2.1) * 17; m.y = a.y + Math.sin(m.ang + i * 2.1) * 17
+  })
+}
+
+function draw(dt) {
+  layoutSystems(false)
+  for (const s of systems.values()) {
+    const k = Math.min(1, dt * 2.5)
+    s.x += (s.tx - s.x) * k; s.y += (s.ty - s.y) * k; s.R += (s.tR - s.R) * k
+    s.spin += dt * 0.025
+    for (const t in s.flash) s.flash[t] *= Math.pow(0.15, dt)
+  }
+  for (const a of agents.values()) updateAgent(a, dt)
+
+  // twinkling stars
+  for (const st of stars) {
+    ctx.fillStyle = `rgba(203, 213, 225, ${0.15 + 0.35 * (0.5 + 0.5 * Math.sin(clockT * st.s + st.p))})`
+    ctx.beginPath(); ctx.arc(st.x, st.y, st.r, 0, 6.29); ctx.fill()
+  }
+  // faint constellation lines between neighbouring suns
+  const sys = [...systems.values()]
+  ctx.setLineDash([2, 7]); ctx.strokeStyle = 'rgba(100, 116, 139, .18)'; ctx.lineWidth = 1
+  for (let i = 1; i < sys.length; i++) { ctx.beginPath(); ctx.moveTo(sys[i - 1].x, sys[i - 1].y); ctx.lineTo(sys[i].x, sys[i].y); ctx.stroke() }
+  ctx.setLineDash([])
+
+  for (const [project, s] of systems) drawSystem(project, s)
+  drawAgents()
+}
+
+function drawSystem(project, s) {
+  const c = hue(project)
+  const list = [...agents.values()].filter(a => a.row.project === project)
+  const live = list.some(a => a.row.status === 'working')
+  const fade = s.dim ? 0.55 : 1
+  const sr = sunRadius(s)
+
+  // halo
+  const g = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, s.R * 1.35)
+  g.addColorStop(0, rgba(c, 0.13 * fade)); g.addColorStop(1, rgba(c, 0))
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(s.x, s.y, s.R * 1.35, 0, 6.29); ctx.fill()
+  // orbit path
+  ctx.strokeStyle = rgba(c, 0.16 * fade); ctx.lineWidth = 1
+  ctx.beginPath(); ctx.ellipse(s.x, s.y, s.R, s.R * 0.86, 0, 0, 6.29); ctx.stroke()
+
+  // planets: one per kind of tool
+  const busyAt = {}
+  for (const a of list) if (a.row.status === 'working') busyAt[toolOf(a.row.tool)] = true
+  for (const tool of PLANETS) {
+    const T = TOOLS[tool], p = planetPos(s, tool)
+    const on = busyAt[tool], fl = s.flash[tool] ?? 0
+    const pr = on ? 8.5 : 4.2
+    if (on || fl > 0.05) {
+      const gg = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, pr * 4)
+      gg.addColorStop(0, rgba(T.c, 0.35 + fl * 0.4)); gg.addColorStop(1, rgba(T.c, 0))
+      ctx.fillStyle = gg; ctx.beginPath(); ctx.arc(p.x, p.y, pr * 4, 0, 6.29); ctx.fill()
+    }
+    if (fl > 0.05) { // ripple as an agent arrives
+      ctx.strokeStyle = rgba(T.c, fl * 0.8); ctx.lineWidth = 1.5
+      ctx.beginPath(); ctx.arc(p.x, p.y, pr + (1 - fl) * 22, 0, 6.29); ctx.stroke(); ctx.lineWidth = 1
+    }
+    ctx.fillStyle = on ? T.c : rgba(T.c, 0.45 * fade)
+    ctx.beginPath(); ctx.arc(p.x, p.y, pr, 0, 6.29); ctx.fill()
+    if (on) {
+      ctx.fillStyle = '#05080f'; ctx.font = `800 ${T.glyph.length > 1 ? 7.5 : 9.5}px ui-monospace, Consolas, monospace`
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(T.glyph, p.x, p.y + 0.5); ctx.textBaseline = 'alphabetic'
+      ctx.fillStyle = T.c; ctx.font = '700 10px ui-sans-serif, Segoe UI, sans-serif'
+      ctx.fillText(T.label.toUpperCase(), p.x, p.y + pr + 24)
+    }
+  }
+
+  // the sun, with its cost ring
+  const pulse = 1 + (live ? 0.08 : 0.03) * Math.sin(clockT * (live ? 3 : 1.2))
+  const sg = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, sr * 2.6 * pulse)
+  sg.addColorStop(0, rgba(c, 0.95 * fade)); sg.addColorStop(0.35, rgba(c, 0.45 * fade)); sg.addColorStop(1, rgba(c, 0))
+  ctx.fillStyle = sg; ctx.beginPath(); ctx.arc(s.x, s.y, sr * 2.6 * pulse, 0, 6.29); ctx.fill()
+  ctx.fillStyle = '#fff'; ctx.globalAlpha = 0.85 * fade
+  ctx.beginPath(); ctx.arc(s.x, s.y, sr * 0.55, 0, 6.29); ctx.fill(); ctx.globalAlpha = 1
+  const cost = list.reduce((t, a) => t + (a.row.cost || 0), 0)
+  ctx.strokeStyle = 'rgba(253, 230, 138, .12)'; ctx.lineWidth = 2.5
+  ctx.beginPath(); ctx.arc(s.x, s.y, sr + 7, 0, 6.29); ctx.stroke()
+  if (cost > 0) {
+    ctx.strokeStyle = rgba('#fde68a', fade)
+    ctx.beginPath(); ctx.arc(s.x, s.y, sr + 7, -Math.PI / 2, -Math.PI / 2 + Math.min(1, cost / 50) * Math.PI * 2); ctx.stroke()
+  }
+  ctx.lineWidth = 1
+  ctx.textAlign = 'center'
+  ctx.font = '800 12.5px ui-sans-serif, Segoe UI, sans-serif'; ctx.fillStyle = rgba(c, fade)
+  ctx.fillText(project.toUpperCase(), s.x, s.y + sr + 26)
+  if (cost > 0) { ctx.font = '600 10px ui-monospace, Consolas, monospace'; ctx.fillStyle = rgba('#fde68a', 0.85 * fade); ctx.fillText(money(cost), s.x, s.y + sr + 39) }
+}
+
+function drawAgents() {
+  for (const a of agents.values()) {
+    const row = a.row, st = STATUS[row.status]
+    const tc = TOOLS[toolOf(row.tool)].c
+    const working = row.status === 'working'
+    const focus = hovered === a || highlighted === row.id || drawerId === row.id
+    const x = a.x, y = a.y
+    a.drawX = x; a.drawY = y
+
+    // short comet tail while hopping between planets
+    for (let i = 1; i < a.trail.length; i++) {
+      const [x0, y0] = a.trail[i - 1], [x1, y1] = a.trail[i]
+      ctx.strokeStyle = rgba(working ? tc : st.c, (i / a.trail.length) * 0.7); ctx.lineWidth = (i / a.trail.length) * 4
+      ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke()
+    }
+    ctx.lineWidth = 1
+    for (const c of a.crew) { ctx.fillStyle = rgba(tc, 0.8 * c.alpha); ctx.beginPath(); ctx.arc(c.x, c.y, c.size, 0, 6.29); ctx.fill() }
+    a.subs.forEach((m, i) => {
+      const on = row.subagents[i]?.isActive
+      ctx.fillStyle = on ? '#c084fc' : '#64748b'
+      ctx.beginPath(); ctx.arc(m.x, m.y, 2.8, 0, 6.29); ctx.fill()
+    })
+
+    const r = focus ? 7 : 5.5
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r * 4)
+    g.addColorStop(0, rgba(working ? tc : st.c, working ? 0.55 : 0.28)); g.addColorStop(1, rgba(st.c, 0))
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r * 4, 0, 6.29); ctx.fill()
+    ctx.fillStyle = row.status === 'sleeping' ? 'rgba(129,140,248,.6)' : st.c
+    ctx.beginPath(); ctx.arc(x, y, r, 0, 6.29); ctx.fill()
+    if (working) { ctx.fillStyle = tc; ctx.beginPath(); ctx.arc(x, y, r * 0.55, 0, 6.29); ctx.fill() }
+
+    if (row.status === 'waiting') {
+      const p = (clockT * 0.6) % 1
+      ctx.strokeStyle = rgba(st.c, (1 - p) * 0.8); ctx.lineWidth = 1.4
+      ctx.beginPath(); ctx.arc(x, y, 7 + p * 16, 0, 6.29); ctx.stroke(); ctx.lineWidth = 1
+    }
+    if (row.status === 'sleeping') {
+      for (let z = 0; z < 3; z++) {
+        const p = (clockT * 0.35 + z / 3) % 1
+        ctx.fillStyle = rgba(st.c, Math.sin(p * Math.PI) * 0.8)
+        ctx.font = `700 ${8 + z * 2}px ui-sans-serif, Segoe UI, sans-serif`; ctx.textAlign = 'left'
+        ctx.fillText('z', x + 7 + p * 10, y - 5 - p * 15)
+      }
+    }
+    if (notes.has(row.id)) {
+      const bob = Math.sin(clockT * 4) * 1.5
+      ctx.fillStyle = '#fbbf24'; ctx.shadowColor = '#f59e0b'; ctx.shadowBlur = 10
+      ctx.beginPath(); ctx.arc(x, y - 16 + bob, 6.5, 0, 6.29); ctx.fill(); ctx.shadowBlur = 0
+      ctx.fillStyle = '#1a1205'; ctx.font = '800 10px ui-sans-serif, Segoe UI, sans-serif'; ctx.textAlign = 'center'
+      ctx.fillText('!', x, y - 12.5 + bob)
+    }
+    if (focus) { ctx.strokeStyle = st.c; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(x, y, 13, 0, 6.29); ctx.stroke(); ctx.lineWidth = 1 }
+    // names only for agents doing something (or the one you point at), to keep it calm
+    if (working || row.status === 'waiting' || focus) {
+      const text = clip(row.title, 24)
+      ctx.font = '600 11px ui-sans-serif, Segoe UI, sans-serif'; ctx.textAlign = 'left'
+      const tw = ctx.measureText(text).width
+      ctx.fillStyle = 'rgba(5, 8, 15, .82)'
+      ctx.beginPath(); ctx.roundRect(x + 12, y - 8.5, tw + 12, 17, 8.5); ctx.fill()
+      ctx.strokeStyle = rgba(working ? tc : st.c, 0.5); ctx.stroke()
+      ctx.fillStyle = '#e2e8f0'; ctx.fillText(text, x + 18, y + 3.5)
+    }
+  }
+}
+  return { build, reset: resetAgent, draw }
+}
+
+// ===================== theme: neural network =====================
+// Agents travel across the network to the station of the tool they are using.
+function makeNetworkTheme() {
 let neurons = []            // { x, y, fire, fireC, nb, phase }
 let edges = new Map()       // "a-b" -> { a, b, glow, color }
 let stations = {}           // tool -> neuron index
@@ -328,13 +606,7 @@ function nearestFree(x, y, taken) {
   return best
 }
 
-function buildNetwork() {
-  const rect = canvas.getBoundingClientRect()
-  DPR = window.devicePixelRatio || 1
-  // draw in "logical" units scaled by S, so A+ makes everything on the network bigger
-  W = rect.width / S; H = rect.height / S
-  canvas.width = rect.width * DPR; canvas.height = rect.height * DPR
-  ctx.setTransform(DPR * S, 0, 0, DPR * S, 0, 0)
+function build() {
 
   const top = 130, bottom = H - 180, left = 60, right = W - 60
   const cols = Math.max(5, Math.round((right - left) / 92))
@@ -382,8 +654,7 @@ function buildNetwork() {
   hubTaken = taken
   hubs.clear()
   distCache = new Map()
-  // keep each agent's place on its ring when the window is resized
-  for (const a of agents.values()) { const ang = a.angle; resetAgent(a); if (ang !== undefined) a.angle = ang }
+  for (const a of agents.values()) resetAgent(a)
 }
 
 // project hubs sit on an inner ring between the stations
@@ -414,135 +685,95 @@ function distTo(target) {
   return d
 }
 
-// ===================== agents =====================
-// Each agent orbits its project's node instead of travelling the network, so it is
-// always easy to find. While it works it "feeds": particles flow from the node into
-// it (in the colour of the tool it is using) and the tool's station streams down to
-// the node. Small worker dots circle a busy agent; subagents ride an outer ring.
-const agents = new Map()
-let feeds = []    // particles from a project node into an agent
-let streams = []  // particles from a tool station down to a project node
-const ORBIT_SPEED = { working: 0.85, waiting: 0.22, idle: 0.12, sleeping: 0 }
+// ===================== walkers =====================
+// A walker hops neuron to neuron. mode 'go': head to target, then roam near it.
+// 'home': roam slowly near target. 'rest': go to target and stop there.
+function walker(node) { return { node, next: node, t: 1, x: neurons[node].x, y: neurons[node].y, trail: [], alpha: 1 } }
 
-function resetAgent(a) {
-  const n = neurons[hubFor(a.row.project)]
-  a.angle = (hash(a.row.id) % 628) / 100
-  a.omega = 0
-  a.x = n.x; a.y = n.y
-  a.gulp = 0
-  a.feedT = 0; a.streamT = 0
-  a.crew = []
-  a.subs = []
+function chooseNext(w, target, mode, roam) {
+  const d = distTo(target)
+  const here = d[w.node]
+  const nb = neurons[w.node].nb
+  if (mode === 'rest' && here === 0) return w.node
+  if (here > roam) {
+    const closer = nb.filter(j => d[j] < here)
+    return closer[(Math.random() * closer.length) | 0] ?? w.node
+  }
+  const near = nb.filter(j => d[j] <= roam)
+  return near[(Math.random() * near.length) | 0] ?? w.node
 }
 
-// orbit radius: agents of one project take turns on rings further out
-function orbitOf(a) {
-  const mates = [...agents.values()].filter(b => b.row.project === a.row.project)
-  mates.sort((p, q) => (p.row.id < q.row.id ? -1 : 1))
-  const k = Math.max(0, mates.indexOf(a))
-  return 34 + k * 13
+function stepWalker(w, target, mode, speed, color, dt, fires) {
+  if (w.t >= 1) {
+    w.node = w.next
+    if (fires) { const n = neurons[w.node]; n.fire = 1; n.fireC = color }
+    w.next = chooseNext(w, target, mode, mode === 'go' ? 2 : 1)
+    w.t = w.next === w.node ? 1 : 0
+    const e = edges.get(edgeKey(w.node, w.next))
+    if (e && fires) { e.glow = 1; e.color = color }
+  }
+  if (w.next !== w.node) w.t = Math.min(1, w.t + dt * speed)
+  const a = neurons[w.node], b = neurons[w.next]
+  const t = w.t, ease = t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2
+  w.x = a.x + (b.x - a.x) * ease
+  w.y = a.y + (b.y - a.y) * ease
+  if (fires) { w.trail.push([w.x, w.y]); if (w.trail.length > 22) w.trail.shift() }
+  else if (w.trail.length) w.trail.shift()
+}
+
+// ===================== agents =====================
+function resetAgent(a) {
+  const hub = hubFor(a.row.project)
+  a.main = walker(hub)
+  a.swarm = []
+  a.subs = []
+}
+function agentTarget(row) {
+  return row.status === 'working' ? stations[toolOf(row.tool)] : hubFor(row.project)
 }
 
 function updateAgent(a, dt) {
   const row = a.row
-  const hub = neurons[hubFor(row.project)]
-  const working = row.status === 'working'
   const tool = toolOf(row.tool)
   const tc = TOOLS[tool].c
+  const working = row.status === 'working'
+  const target = agentTarget(row)
+  const mode = working ? 'go' : row.status === 'sleeping' ? 'rest' : 'home'
+  const speed = working ? 2.3 : row.status === 'sleeping' ? 0.8 : row.status === 'waiting' ? 0.25 : 0.15
+  stepWalker(a.main, target, mode, speed, tc, dt, working)
 
-  // ease the spin up or down, so a sleeping agent glides to a stop
-  a.omega += ((ORBIT_SPEED[row.status] ?? 0.1) - a.omega) * Math.min(1, dt * 1.5)
-  a.angle += a.omega * dt
-  const R = orbitOf(a)
-  const tx = hub.x + Math.cos(a.angle) * R
-  const ty = hub.y + Math.sin(a.angle) * R * 0.82
-  a.x += (tx - a.x) * Math.min(1, dt * 5)
-  a.y += (ty - a.y) * Math.min(1, dt * 5)
-  a.gulp *= Math.pow(0.02, dt)
-
-  // feeding from the project node
-  const feedEvery = working ? 0.11 : row.status === 'waiting' ? 1.4 : 0
-  if (feedEvery) {
-    a.feedT += dt
-    while (a.feedT > feedEvery) {
-      a.feedT -= feedEvery
-      const o = Math.random() * 6.28
-      feeds.push({ a, sx: hub.x + Math.cos(o) * 12, sy: hub.y + Math.sin(o) * 12, t: 0, speed: rand(1.3, 2), color: working ? tc : '#fbbf24', size: working ? rand(1.4, 2.4) : 1.4, wob: rand(-1, 1) })
+  // the swarm: extra dots that fly with a working agent to its station
+  const want = working ? 5 + Math.min(4, row.subagents.length * 2) : 0
+  while (a.swarm.filter(s => !s.leaving).length < want) {
+    const s = walker(a.main.node)
+    s.speed = rand(1.5, 3.2); s.leaving = false; s.alpha = 0; s.size = rand(1.6, 2.8)
+    a.swarm.push(s)
+  }
+  let extra = a.swarm.filter(s => !s.leaving).length - want
+  for (const s of a.swarm) if (extra > 0 && !s.leaving) { s.leaving = true; extra-- }
+  for (const s of a.swarm) {
+    if (s.leaving) {
+      stepWalker(s, a.main.node, 'rest', 3, tc, dt, false)
+      s.alpha -= dt * 0.8
+    } else {
+      s.alpha = Math.min(1, s.alpha + dt * 1.5)
+      stepWalker(s, target, 'go', s.speed, tc, dt, true)
     }
   }
+  a.swarm = a.swarm.filter(s => s.alpha > 0)
 
-  // the tool's station streams down to the project node while the agent uses it
-  if (working && stations[tool] !== undefined) {
-    a.streamT += dt
-    while (a.streamT > 0.22) {
-      a.streamT -= 0.22
-      const st = neurons[stations[tool]]
-      st.fire = Math.max(st.fire, 0.5); st.fireC = tc
-      streams.push({ from: stations[tool], to: hubFor(row.project), t: 0, speed: rand(0.45, 0.65), color: tc, bend: rand(-0.25, 0.25) })
-    }
-  }
-
-  // worker crew: tiny dots circling a busy agent
-  const want = working ? 4 + Math.min(3, row.subagents.length) : 0
-  while (a.crew.filter(c => !c.leaving).length < want) a.crew.push({ ang: Math.random() * 6.28, r: rand(10, 15), spd: rand(2.2, 3.6) * (Math.random() < .5 ? -1 : 1), alpha: 0, size: rand(1.2, 2), leaving: false })
-  let extra = a.crew.filter(c => !c.leaving).length - want
-  for (const c of a.crew) if (extra > 0 && !c.leaving) { c.leaving = true; extra-- }
-  for (const c of a.crew) {
-    c.ang += c.spd * dt
-    c.alpha = c.leaving ? c.alpha - dt * 1.2 : Math.min(1, c.alpha + dt * 1.5)
-    c.x = a.x + Math.cos(c.ang) * c.r
-    c.y = a.y + Math.sin(c.ang) * c.r
-  }
-  a.crew = a.crew.filter(c => c.alpha > 0)
-
-  // subagents on an outer ring around the agent
-  while (a.subs.length < row.subagents.length) a.subs.push({ ang: Math.random() * 6.28 })
+  // subagents: purple walkers that go to their own tool's station
+  while (a.subs.length < row.subagents.length) a.subs.push(walker(a.main.node))
   a.subs.length = row.subagents.length
   a.subs.forEach((s, k) => {
-    const on = row.subagents[k]?.isActive
-    s.ang += (on ? 1.4 : 0.3) * dt
-    s.x = a.x + Math.cos(s.ang + k * 2.1) * 22
-    s.y = a.y + Math.sin(s.ang + k * 2.1) * 22
+    const sa = row.subagents[k]
+    const st = sa.isActive ? stations[toolOf(sa.tool)] : a.main.node
+    stepWalker(s, st, sa.isActive ? 'go' : 'rest', sa.isActive ? 2 : 1, '#c084fc', dt, sa.isActive)
   })
 }
 
-function drawFeeding(dt) {
-  // station -> project node: a soft curved stream
-  streams = streams.filter(p => p.t < 1)
-  for (const p of streams) {
-    p.t += dt * p.speed
-    const A = neurons[p.from], B = neurons[p.to]
-    const mx = (A.x + B.x) / 2 - (B.y - A.y) * p.bend, my = (A.y + B.y) / 2 + (B.x - A.x) * p.bend
-    const t = p.t, u = 1 - t
-    const x = u * u * A.x + 2 * u * t * mx + t * t * B.x
-    const y = u * u * A.y + 2 * u * t * my + t * t * B.y
-    ctx.fillStyle = rgba(p.color, Math.sin(t * Math.PI) * 0.75)
-    ctx.beginPath(); ctx.arc(x, y, 1.8, 0, 6.29); ctx.fill()
-    if (p.t >= 1) { B.fire = Math.max(B.fire, 0.6); B.fireC = p.color }
-  }
-  // project node -> agent: the agent "feeding"
-  feeds = feeds.filter(p => p.t < 1 && agents.has(p.a.row.id))
-  for (const p of feeds) {
-    p.t += dt * p.speed
-    const t = p.t * p.t // speeds up as it is pulled in
-    const dx = p.a.x - p.sx, dy = p.a.y - p.sy
-    const x = p.sx + dx * t - dy * 0.15 * p.wob * Math.sin(t * Math.PI)
-    const y = p.sy + dy * t + dx * 0.15 * p.wob * Math.sin(t * Math.PI)
-    ctx.fillStyle = rgba(p.color, 0.35 + 0.6 * t)
-    ctx.beginPath(); ctx.arc(x, y, p.size * (1 - t * 0.5), 0, 6.29); ctx.fill()
-    if (p.t >= 1) p.a.gulp = Math.min(1, p.a.gulp + 0.35)
-  }
-}
-
 // ===================== drawing =====================
-let hovered = null, highlighted = null, last = performance.now(), clockT = 0
-
-function frame(now) {
-  const dt = Math.min(0.05, (now - last) / 1000)
-  last = now
-  clockT += dt
-  if (replay.on && replay.playing) advanceReplay(dt)
-  ctx.clearRect(0, 0, W, H)
+function draw(dt) {
   for (const a of agents.values()) updateAgent(a, dt)
 
   if (Math.random() < dt * 7 && edges.size) {
@@ -591,26 +822,14 @@ function frame(now) {
 
   drawStations()
   drawHubs()
-  drawFeeding(dt)
 
-  // worker crew and subagents around each agent
+  // swarms and subagents under the agents
   for (const a of agents.values()) {
     const tc = TOOLS[toolOf(a.row.tool)].c
-    for (const c of a.crew) {
-      ctx.fillStyle = rgba(tc, 0.85 * c.alpha)
-      ctx.beginPath(); ctx.arc(c.x, c.y, c.size, 0, 6.29); ctx.fill()
-    }
-    a.subs.forEach((s, k) => {
-      const on = a.row.subagents[k]?.isActive
-      ctx.fillStyle = on ? 'rgba(192,132,252,.3)' : 'rgba(71,85,105,.25)'
-      ctx.beginPath(); ctx.arc(s.x, s.y, 7, 0, 6.29); ctx.fill()
-      ctx.fillStyle = on ? '#c084fc' : '#64748b'
-      ctx.beginPath(); ctx.arc(s.x, s.y, 3.2, 0, 6.29); ctx.fill()
-    })
+    for (const s of a.swarm) drawDot(s, tc, s.size, s.alpha)
+    a.subs.forEach((s, k) => drawDot(s, '#c084fc', 3.2, 1, a.row.subagents[k]?.isActive))
   }
   drawAgents()
-  if (mini.ctx) drawMini()
-  requestAnimationFrame(frame)
 }
 
 function drawStations() {
@@ -683,7 +902,7 @@ function drawFiles(project, n, list) {
     const c = f.op === 'edit' ? TOOLS.edit.c : TOOLS.read.c
     const hot = f.ageS < 15
     if (hot) {
-      const src = f.agent
+      const src = f.agent.main
       ctx.strokeStyle = rgba(c, .5); ctx.setLineDash([3, 4])
       ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(src.x, src.y); ctx.stroke(); ctx.setLineDash([])
       ctx.shadowColor = c; ctx.shadowBlur = 14
@@ -719,18 +938,30 @@ function drawDot(w, color, r, alpha = 1, busy = true) {
 }
 
 function drawAgents() {
+  const sleepers = new Map()
   for (const a of agents.values()) {
-    const row = a.row, st = STATUS[row.status]
+    const row = a.row, st = STATUS[row.status], w = a.main
     const tc = TOOLS[toolOf(row.tool)].c
     const focus = hovered === a || highlighted === row.id || drawerId === row.id
-    const x = a.x, y = a.y
+    let x = w.x, y = w.y
+    if (row.status === 'sleeping' && w.node === hubFor(row.project) && w.t >= 1) {
+      const k = sleepers.get(row.project) ?? 0
+      sleepers.set(row.project, k + 1)
+      const ang = Math.PI * 0.75 + k * 0.9
+      x += Math.cos(ang) * 28; y += Math.sin(ang) * 28
+    }
     a.drawX = x; a.drawY = y
     const working = row.status === 'working'
-    // a faint tether to the node it orbits, brighter while feeding
-    const hubN = neurons[hubFor(row.project)]
-    ctx.strokeStyle = rgba(working ? tc : st.c, working ? 0.22 : 0.08); ctx.lineWidth = 1
-    ctx.beginPath(); ctx.moveTo(hubN.x, hubN.y); ctx.lineTo(x, y); ctx.stroke()
-    const r = (focus ? 8 : 6.5) + a.gulp * 2.6
+    // trail in the tool's colour
+    if (w.trail.length > 1) {
+      for (let i = 1; i < w.trail.length; i++) {
+        const [x0, y0] = w.trail[i - 1], [x1, y1] = w.trail[i]
+        ctx.strokeStyle = rgba(tc, (i / w.trail.length) * .8); ctx.lineWidth = (i / w.trail.length) * 6
+        ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke()
+      }
+      ctx.lineWidth = 1
+    }
+    const r = focus ? 8 : 6.5
     const g = ctx.createRadialGradient(x, y, 0, x, y, r * 4.5)
     g.addColorStop(0, rgba(working ? tc : st.c, working ? .6 : .3)); g.addColorStop(1, rgba(st.c, 0))
     ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r * 4.5, 0, 6.29); ctx.fill()
@@ -774,10 +1005,197 @@ function drawAgents() {
     }
   }
 }
+  return { build, reset: resetAgent, draw }
+}
+
+// ===================== theme: simple =====================
+// A calm board: one panel per project listing its agents, what each is doing and
+// with which tool. Nothing travels; only small pulses show activity.
+function makeSimpleTheme() {
+  const panels = new Map() // project -> { x, y, w, h, tx, ty, th, alpha }
+  const order = []
+  const ROW = 50, HEAD = 42, PAD = 10, GAP = 16
+  const rank = { working: 0, waiting: 1, idle: 2, sleeping: 3 }
+
+  function fit(text, maxW) {
+    if (ctx.measureText(text).width <= maxW) return text
+    let t = text
+    while (t.length > 1 && ctx.measureText(t + '…').width > maxW) t = t.slice(0, -1)
+    return t + '…'
+  }
+  function layout(snap) {
+    const all = [...agents.values()]
+    for (const a of all) if (!order.includes(a.row.project)) order.push(a.row.project)
+    const projects = order.filter(p => all.some(a => a.row.project === p))
+    const top = 120, left = 24, right = W - 24
+    const cols = Math.max(1, Math.min(projects.length, Math.floor((right - left + GAP) / (320 + GAP))))
+    const cw = (right - left - (cols - 1) * GAP) / cols
+    const heights = new Array(cols).fill(top)
+    for (const p of projects) {
+      const n = all.filter(a => a.row.project === p).length
+      const h = HEAD + n * ROW + PAD
+      const c = heights.indexOf(Math.min(...heights))
+      let s = panels.get(p)
+      if (!s) { s = { alpha: 0 }; panels.set(p, s) }
+      s.tx = left + c * (cw + GAP); s.ty = heights[c]; s.w = cw; s.th = h
+      if (snap || s.x === undefined) { s.x = s.tx; s.y = s.ty; s.h = s.th }
+      heights[c] += h + GAP
+    }
+    for (const p of [...panels.keys()]) if (!projects.includes(p)) panels.delete(p)
+  }
+  function build() { layout(true) }
+  function reset(a) { a.hitBox = null; layout(false) }
+
+  function draw(dt) {
+    layout(false)
+    const all = [...agents.values()]
+    for (const [p, s] of panels) {
+      const k = Math.min(1, dt * 6)
+      s.x += (s.tx - s.x) * k; s.y += (s.ty - s.y) * k; s.h += (s.th - s.h) * k
+      s.alpha = Math.min(1, s.alpha + dt * 2.5)
+      const c = hue(p)
+      const list = all.filter(a => a.row.project === p).sort((a, b) => rank[a.row.status] - rank[b.row.status] || (a.row.title < b.row.title ? -1 : 1))
+      const live = list.some(a => a.row.status === 'working')
+      ctx.globalAlpha = s.alpha
+
+      // panel
+      ctx.fillStyle = 'rgba(13, 19, 34, .88)'
+      ctx.strokeStyle = rgba(c, live ? 0.55 + 0.2 * Math.sin(clockT * 2.5) : 0.3)
+      ctx.lineWidth = 1.2
+      ctx.beginPath(); ctx.roundRect(s.x, s.y, s.w, s.h, 14); ctx.fill(); ctx.stroke()
+      const bar = ctx.createLinearGradient(s.x, 0, s.x + s.w, 0)
+      bar.addColorStop(0, rgba(c, 0)); bar.addColorStop(0.5, rgba(c, live ? 0.9 : 0.45)); bar.addColorStop(1, rgba(c, 0))
+      ctx.fillStyle = bar; ctx.fillRect(s.x + 14, s.y, s.w - 28, 2)
+
+      // header
+      ctx.textAlign = 'left'; ctx.font = '800 13px ui-sans-serif, Segoe UI, sans-serif'; ctx.fillStyle = c
+      ctx.fillText(p.toUpperCase(), s.x + 16, s.y + 26)
+      const cost = list.reduce((t, a) => t + (a.row.cost || 0), 0)
+      ctx.textAlign = 'right'; ctx.font = '600 11px ui-monospace, Consolas, monospace'
+      ctx.fillStyle = '#fde68a'; ctx.fillText(cost ? money(cost) : '', s.x + s.w - 16, s.y + 26)
+
+      list.forEach((a, i) => {
+        const row = a.row, st = STATUS[row.status], T = TOOLS[toolOf(row.tool)]
+        const ry = s.y + HEAD + i * ROW
+        const working = row.status === 'working'
+        const focus = hovered === a || highlighted === row.id || drawerId === row.id
+        const unread = notes.has(row.id)
+        a.hitBox = { x: s.x, y: ry, w: s.w, h: ROW }
+        a.drawX = s.x + 22; a.drawY = ry + 17
+
+        if (focus || unread) {
+          ctx.fillStyle = unread ? 'rgba(245, 158, 11, .10)' : 'rgba(148, 163, 184, .07)'
+          ctx.beginPath(); ctx.roundRect(s.x + 6, ry + 2, s.w - 12, ROW - 4, 10); ctx.fill()
+        }
+        if (i > 0) { ctx.fillStyle = 'rgba(31, 42, 68, .7)'; ctx.fillRect(s.x + 16, ry, s.w - 32, 1) }
+
+        // status dot
+        const dx = s.x + 22, dy = ry + 17
+        if (working || row.status === 'waiting') {
+          const pp = (clockT * (working ? 1.1 : 0.6)) % 1
+          ctx.strokeStyle = rgba(st.c, (1 - pp) * 0.7); ctx.lineWidth = 1.3
+          ctx.beginPath(); ctx.arc(dx, dy, 5 + pp * 9, 0, 6.29); ctx.stroke(); ctx.lineWidth = 1
+        }
+        ctx.fillStyle = row.status === 'sleeping' ? 'rgba(129,140,248,.55)' : st.c
+        ctx.beginPath(); ctx.arc(dx, dy, 5, 0, 6.29); ctx.fill()
+
+        // title and status
+        const right = s.x + s.w - 16
+        ctx.textAlign = 'right'; ctx.font = '800 9.5px ui-sans-serif, Segoe UI, sans-serif'; ctx.fillStyle = st.c
+        ctx.fillText(st.label, right, ry + 21)
+        let badgeW = ctx.measureText(st.label).width
+        if (unread) {
+          ctx.font = '800 9px ui-sans-serif, Segoe UI, sans-serif'
+          const nw = ctx.measureText('NEW').width + 10
+          ctx.fillStyle = '#fbbf24'; ctx.beginPath(); ctx.roundRect(right - badgeW - nw - 6, ry + 11, nw, 13, 6.5); ctx.fill()
+          ctx.fillStyle = '#1a1205'; ctx.textAlign = 'center'; ctx.fillText('NEW', right - badgeW - 6 - nw / 2, ry + 21)
+          badgeW += nw + 8
+        }
+        ctx.textAlign = 'left'; ctx.font = '650 12.5px ui-sans-serif, Segoe UI, sans-serif'
+        ctx.fillStyle = row.status === 'sleeping' ? '#64748b' : unread ? '#fde68a' : '#e2e8f0'
+        ctx.fillText(fit(row.title, right - badgeW - 12 - (s.x + 36)), s.x + 36, ry + 22)
+
+        // second line: tool chip + what it is doing
+        let x2 = s.x + 36
+        if (working) {
+          ctx.font = '700 10px ui-sans-serif, Segoe UI, sans-serif'
+          const tw = ctx.measureText(T.label).width + 14
+          ctx.fillStyle = rgba(T.c, 0.18); ctx.beginPath(); ctx.roundRect(x2, ry + 29, tw, 15, 7.5); ctx.fill()
+          ctx.fillStyle = T.c; ctx.fillText(T.label, x2 + 7, ry + 40)
+          x2 += tw + 8
+        }
+        ctx.font = '500 11px ui-monospace, Consolas, monospace'
+        ctx.fillStyle = working ? '#a5f3fc' : '#64748b'
+        const doing = row.status === 'sleeping' ? 'asleep · ' + row.ago : row.doing
+        ctx.fillText(fit(doing, right - x2), x2, ry + 40)
+
+        // a soft sweep under a working row
+        if (working) {
+          const sweep = ((clockT * 0.45) % 1) * (s.w - 32)
+          const g = ctx.createLinearGradient(s.x + 16 + sweep - 60, 0, s.x + 16 + sweep, 0)
+          g.addColorStop(0, rgba(T.c, 0)); g.addColorStop(1, rgba(T.c, 0.8))
+          ctx.fillStyle = g; ctx.fillRect(Math.max(s.x + 16, s.x + 16 + sweep - 60), ry + ROW - 3, Math.min(60, sweep), 1.5)
+        }
+      })
+      ctx.globalAlpha = 1
+    }
+  }
+  function hit(mx, my) {
+    for (const a of agents.values()) {
+      const b = a.hitBox
+      if (b && mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h) return a
+    }
+    return null
+  }
+  return { build, reset, draw, hit }
+}
+
+const THEMES = [['solar', '☀ Solar'], ['network', '✺ Network'], ['simple', '▦ Simple']]
+const themes = { solar: makeSolarTheme(), network: makeNetworkTheme(), simple: makeSimpleTheme() }
+let themeName = themes[store.get('radar.theme', 'solar')] ? store.get('radar.theme', 'solar') : 'solar'
+let theme = themes[themeName]
+
+function sizeCanvas() {
+  const rect = canvas.getBoundingClientRect()
+  DPR = window.devicePixelRatio || 1
+  // draw in "logical" units scaled by S, so A+ makes everything bigger
+  W = rect.width / S; H = rect.height / S
+  canvas.width = rect.width * DPR; canvas.height = rect.height * DPR
+  ctx.setTransform(DPR * S, 0, 0, DPR * S, 0, 0)
+}
+// called on load, on resize and by A−/A+
+function buildNetwork() { sizeCanvas(); theme.build() }
+function resetAgent(a) { theme.reset(a) }
+function setTheme(name) {
+  if (!themes[name]) return
+  themeName = name
+  theme = themes[name]
+  store.set('radar.theme', name)
+  buildNetwork()
+  for (const a of agents.values()) theme.reset(a)
+  paintThemes()
+}
+const themesEl = document.getElementById('themes')
+themesEl.innerHTML = THEMES.map(([k, label]) => `<button data-theme="${k}">${label}</button>`).join('')
+themesEl.addEventListener('click', ev => { const b = ev.target.closest('button'); if (b) setTheme(b.dataset.theme) })
+function paintThemes() { for (const b of themesEl.children) b.classList.toggle('on', b.dataset.theme === themeName) }
+paintThemes()
+
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000)
+  last = now
+  clockT += dt
+  if (replay.on && replay.playing) advanceReplay(dt)
+  ctx.clearRect(0, 0, W, H)
+  theme.draw(dt)
+  if (mini.ctx) drawMini()
+  requestAnimationFrame(frame)
+}
 
 // ===================== hover & click =====================
 const tip = document.getElementById('tip')
 function agentAt(mx, my) {
+  if (theme.hit) return theme.hit(mx, my)
   let best = null, bd = 22
   for (const a of agents.values()) {
     const d = Math.hypot((a.drawX ?? 0) - mx, (a.drawY ?? 0) - my)
