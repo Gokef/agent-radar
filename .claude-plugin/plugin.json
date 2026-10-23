@@ -1,0 +1,6 @@
+{
+  "name": "agent-radar",
+  "version": "0.1.0",
+  "description": "An animated pane showing which Claude sessions and agents are working on which project",
+  "types": "./types/index.d.ts"
+}

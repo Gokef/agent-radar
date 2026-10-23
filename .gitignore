@@ -1,0 +1,4 @@
+# replies waiting to be sent, written while the radar runs
+data/
+# written by Claude Code when the mod loads
+.claude-plugin/types/

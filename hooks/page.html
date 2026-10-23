@@ -1,0 +1,1112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent Radar</title>
+<style>
+  :root {
+    --bg: #05080f; --panel: rgba(13, 19, 34, .8); --line: #1c2740;
+    --text: #e2e8f0; --muted: #94a3b8; --dim: #64748b;
+    --work: #22d3ee; --wait: #fbbf24; --idle: #94a3b8; --sleep: #818cf8; --sub: #c084fc;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { background: radial-gradient(ellipse at 40% 30%, #0b1530 0%, var(--bg) 70%); color: var(--text); overflow: hidden;
+    font: 14px/1.4 ui-sans-serif, "Segoe UI", system-ui, sans-serif; }
+  .mono { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+
+  .app { height: 100%; display: grid; grid-template-columns: 1fr 360px; }
+  .stage { position: relative; min-width: 0; overflow: hidden; }
+  #net { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+  header { position: absolute; left: 24px; top: 18px; right: 24px; display: flex; align-items: flex-start; gap: 18px; pointer-events: none; z-index: 2; }
+  header .btns, header .stats { pointer-events: auto; }
+  h1 { margin: 0; font-size: 26px; font-weight: 800; letter-spacing: .3em;
+    background: linear-gradient(90deg, #e2e8f0, #67e8f9, #c4b5fd, #e2e8f0); background-size: 300% 100%;
+    -webkit-background-clip: text; background-clip: text; color: transparent; animation: sheen 8s linear infinite; }
+  @keyframes sheen { to { background-position: 300% 0; } }
+  .stats { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  .stat { padding: 3px 11px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); color: var(--muted); font-size: 12.5px; backdrop-filter: blur(8px); }
+  .stat b { font-size: 14px; margin-right: 4px; }
+  .right { margin-left: auto; text-align: right; }
+  .clock { font-size: 24px; font-weight: 300; letter-spacing: .06em; font-variant-numeric: tabular-nums; }
+  .live { display: inline-flex; align-items: center; gap: 8px; color: #4ade80; font-size: 11px; letter-spacing: .2em; }
+  .live i { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 10px #22c55e; animation: breathe 2s ease-in-out infinite; }
+  .live.off { color: #f87171; } .live.off i { background: #ef4444; box-shadow: 0 0 10px #ef4444; }
+  .live.replay { color: #fbbf24; } .live.replay i { background: #f59e0b; box-shadow: 0 0 10px #f59e0b; }
+  .btns { display: flex; gap: 6px; justify-content: flex-end; margin-top: 8px; }
+  .btn { padding: 5px 11px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); font-size: 12px; color: var(--muted); transition: border-color .2s, color .2s, background .2s; }
+  .btn:hover { border-color: #334155; color: var(--text); }
+  .btn.on { color: #67e8f9; border-color: #155e75; background: #082f49aa; }
+  @keyframes breathe { 50% { opacity: .35; } }
+
+  .legend { position: absolute; left: 24px; bottom: 96px; display: flex; flex-wrap: wrap; gap: 12px; color: var(--muted); font-size: 11.5px; z-index: 2;
+    background: var(--panel); border: 1px solid var(--line); padding: 6px 14px; border-radius: 999px; backdrop-filter: blur(8px); max-width: calc(100% - 48px); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { width: 9px; height: 9px; border-radius: 50%; background: var(--c); box-shadow: 0 0 8px var(--c); }
+  .legend .sep { width: 1px; background: var(--line); align-self: stretch; }
+
+  /* ---------- timeline ---------- */
+  .timeline { position: absolute; left: 0; right: 0; bottom: 0; height: 84px; z-index: 2; border-top: 1px solid var(--line);
+    background: rgba(6, 10, 20, .85); backdrop-filter: blur(10px); display: grid; grid-template-columns: auto 1fr; gap: 12px; padding: 10px 16px; }
+  .tl-ctl { display: flex; flex-direction: column; gap: 6px; justify-content: center; width: 112px; }
+  .tl-ctl .when { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .tl-ctl .row2 { display: flex; gap: 6px; }
+  #tl { width: 100%; height: 64px; display: block; cursor: ew-resize; border-radius: 8px; }
+
+  /* ---------- tooltip & drawer ---------- */
+  .tip { position: absolute; z-index: 4; pointer-events: none; width: 300px; padding: 12px 14px; border-radius: 12px;
+    background: rgba(10, 15, 28, .95); border: 1px solid var(--line); box-shadow: 0 12px 40px #000a; opacity: 0; transform: translateY(4px); transition: opacity .15s, transform .15s; }
+  .tip.on { opacity: 1; transform: none; }
+  .tip .t { font-weight: 650; font-size: 14.5px; }
+  .tip .p { color: var(--muted); margin-top: 3px; }
+  .tip .d { margin-top: 8px; font-size: 12px; color: #67e8f9; word-break: break-word; }
+
+  .drawer { position: absolute; top: 0; right: 0; bottom: 84px; width: 380px; z-index: 5; background: rgba(8, 12, 24, .96); border-left: 1px solid var(--line);
+    backdrop-filter: blur(14px); transform: translateX(105%); transition: transform .35s cubic-bezier(.2, .8, .2, 1); padding: 20px; overflow: auto; box-shadow: -20px 0 60px #0008; }
+  .drawer.on { transform: none; }
+  .drawer .x { position: absolute; right: 14px; top: 12px; background: none; border: 0; color: var(--dim); font-size: 20px; }
+  .drawer h3 { margin: 0 30px 4px 0; font-size: 18px; }
+  .drawer .k { color: var(--dim); font-size: 11px; letter-spacing: .16em; margin: 16px 0 6px; font-weight: 700; }
+  .drawer .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .drawer .cell { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
+  .drawer .cell b { display: block; font-size: 16px; }
+  .drawer .cell span { color: var(--dim); font-size: 11px; }
+  .drawer .file { display: flex; gap: 8px; font-size: 12.5px; padding: 3px 0; align-items: center; }
+  .drawer .file i { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+  .drawer .file span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .drawer .file em { margin-left: auto; color: var(--dim); font-style: normal; font-size: 11px; flex: none; }
+  .drawer textarea { width: 100%; min-height: 80px; resize: vertical; background: #0b1222; color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 10px; font: inherit; }
+  .drawer textarea:focus { outline: none; border-color: #155e75; }
+  .drawer .acts { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  .drawer .primary { background: linear-gradient(90deg, #0891b2, #7c3aed); border: 0; color: white; padding: 7px 16px; border-radius: 999px; font-weight: 600; }
+  .drawer .note { color: var(--dim); font-size: 11.5px; margin-top: 6px; }
+  .drawer .status { margin-top: 8px; font-size: 12.5px; }
+
+  /* ---------- summary modal ---------- */
+  .modal { position: fixed; inset: 0; z-index: 10; background: #000a; display: none; place-items: center; backdrop-filter: blur(4px); }
+  .modal.on { display: grid; animation: fade .25s ease both; }
+  @keyframes fade { from { opacity: 0 } }
+  .sheet { width: min(760px, calc(100vw - 32px)); max-height: calc(100vh - 40px); overflow: auto; background: #0a1020; border: 1px solid var(--line); border-radius: 18px; padding: 24px 26px; position: relative; animation: pop .35s cubic-bezier(.2, .8, .2, 1) both; }
+  @keyframes pop { from { transform: translateY(14px) scale(.98); opacity: 0 } }
+  .sheet h2 { margin: 0 0 4px; font-size: 22px; letter-spacing: .08em; }
+  .sheet .sub { color: var(--dim); margin-bottom: 18px; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+  .tile { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+  .tile b { display: block; font-size: 24px; font-weight: 700; }
+  .tile span { color: var(--dim); font-size: 12px; }
+  .bars { display: grid; gap: 8px; margin-top: 8px; }
+  .bar { display: grid; grid-template-columns: 110px 1fr 70px; gap: 10px; align-items: center; font-size: 12.5px; }
+  .bar .track { height: 10px; background: #111a2e; border-radius: 99px; overflow: hidden; }
+  .bar .fill { height: 100%; border-radius: 99px; width: 0; transition: width 1s cubic-bezier(.2, .8, .2, 1); }
+  .bar em { color: var(--dim); font-style: normal; text-align: right; }
+  .stack { display: flex; height: 14px; border-radius: 99px; overflow: hidden; margin-top: 8px; }
+  .stack div { height: 100%; transition: flex-grow 1s; }
+
+  /* ---------- sidebar ---------- */
+  aside { border-left: 1px solid var(--line); background: rgba(7, 11, 22, .85); backdrop-filter: blur(12px); display: grid; grid-template-rows: auto 1fr auto 38%; min-height: 0; }
+  aside h2 { margin: 0; padding: 16px 18px 10px; font-size: 11px; letter-spacing: .24em; color: var(--muted); font-weight: 700; }
+  .list, .feed { overflow: auto; padding: 0 12px 12px; min-height: 0; }
+  .list::-webkit-scrollbar, .feed::-webkit-scrollbar, .drawer::-webkit-scrollbar { width: 7px; }
+  .list::-webkit-scrollbar-thumb, .feed::-webkit-scrollbar-thumb, .drawer::-webkit-scrollbar-thumb { background: #1f2a44; border-radius: 8px; }
+  .row { position: relative; display: grid; grid-template-columns: 14px 1fr auto; gap: 4px 10px; align-items: center; padding: 10px 12px; margin-bottom: 8px;
+    border-radius: 12px; border: 1px solid var(--line); background: var(--panel); cursor: pointer; transition: border-color .2s, background .2s, opacity .3s;
+    animation: rise .45s cubic-bezier(.2, .8, .2, 1) both; overflow: hidden; }
+  .row:hover, .row.hl { border-color: var(--s); background: #111a30; }
+  @keyframes rise { from { opacity: 0; transform: translateY(8px); } }
+  .row .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--s); box-shadow: 0 0 10px var(--s); }
+  .row.working .dot { animation: breathe 1s ease-in-out infinite; }
+  .row.waiting .dot { animation: breathe 2.4s ease-in-out infinite; }
+  .row.sleeping { opacity: .55; }
+  .row.sleeping .dot { box-shadow: none; }
+  .row .title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .badge { font-size: 9.5px; font-weight: 800; letter-spacing: .12em; color: var(--s); }
+  .row .sub { grid-column: 2 / 4; display: flex; gap: 8px; font-size: 12px; color: var(--dim); min-width: 0; }
+  .row .sub .proj { color: var(--c); font-weight: 600; flex: none; }
+  .row .sub .tool { color: var(--t); flex: none; font-weight: 600; }
+  .row .sub .doing { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row.working .sub .doing { color: #a5f3fc; }
+  .row.working::after { content: ''; position: absolute; left: 0; bottom: 0; height: 2px; width: 30%;
+    background: linear-gradient(90deg, transparent, var(--t), #fff); animation: scan 1.8s cubic-bezier(.6, 0, .4, 1) infinite; }
+  @keyframes scan { from { transform: translateX(-100%) } to { transform: translateX(400%) } }
+  .zz { position: absolute; right: 12px; top: 6px; color: var(--sleep); font-size: 11px; font-weight: 700; animation: zz 3s ease-in-out infinite; }
+  @keyframes zz { 0% { opacity: 0; transform: translate(0, 6px) } 40% { opacity: 1 } 100% { opacity: 0; transform: translate(6px, -8px) } }
+  .cost { color: #fde68a; font-size: 11px; flex: none; }
+
+  .feed { list-style: none; margin: 0; display: grid; gap: 9px; align-content: start; }
+  .feed li { font-size: 12px; border-left: 2px solid var(--c); padding: 1px 0 1px 10px; animation: slide .45s cubic-bezier(.2, .8, .2, 1) both; }
+  .feed .when { color: var(--dim); font-size: 10.5px; }
+  .feed .what { color: var(--muted); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  @keyframes slide { from { opacity: 0; transform: translateX(14px); } }
+
+  @media (max-width: 900px) { .app { grid-template-columns: 1fr; } aside { display: none; } .drawer { width: 100%; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <section class="stage" id="stage">
+    <canvas id="net"></canvas>
+    <header>
+      <div>
+        <h1>AGENT RADAR</h1>
+        <div class="stats">
+          <span class="stat"><b id="nWork" style="color:var(--work)">0</b>working</span>
+          <span class="stat"><b id="nWait" style="color:var(--wait)">0</b>waiting on you</span>
+          <span class="stat"><b id="nSleep" style="color:var(--sleep)">0</b>asleep</span>
+          <span class="stat"><b id="nCost" style="color:#fde68a">$0</b>spent today</span>
+        </div>
+      </div>
+      <div class="right">
+        <div class="clock" id="clock">--:--</div>
+        <div class="live" id="live"><i></i><span>LIVE</span></div>
+        <div class="btns">
+          <button class="btn" id="bSound" title="Chime and notify when an agent needs you">🔔 Alerts</button>
+          <button class="btn" id="bMini" title="Small always-on-top window">⧉ Mini</button>
+          <button class="btn" id="bToday" title="Today's summary">📊 Today</button>
+        </div>
+      </div>
+    </header>
+    <div class="legend" id="legend"></div>
+    <div class="tip" id="tip"></div>
+    <div class="drawer" id="drawer"></div>
+    <div class="timeline">
+      <div class="tl-ctl">
+        <div class="when mono" id="tlWhen">LIVE</div>
+        <div class="row2">
+          <button class="btn" id="bPlay" title="Replay the last 6 hours">▶ Replay</button>
+        </div>
+        <div class="row2">
+          <button class="btn on" id="bLive">● Live</button>
+          <button class="btn" id="bSpeed" title="Replay speed">120×</button>
+        </div>
+      </div>
+      <canvas id="tl"></canvas>
+    </div>
+  </section>
+  <aside>
+    <h2>AGENTS</h2>
+    <div class="list" id="list"></div>
+    <h2>ACTIVITY</h2>
+    <ul class="feed" id="feed"></ul>
+  </aside>
+</div>
+<div class="modal" id="modal"><div class="sheet" id="sheet"></div></div>
+<script>
+// ===================== constants & helpers =====================
+const PALETTE = ['#7dd3fc', '#c4b5fd', '#f9a8d4', '#86efac', '#fcd34d', '#fdba74', '#5eead4', '#a5b4fc']
+const hue = name => { let h = 0; for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return PALETTE[h % PALETTE.length] }
+const hash = s => { let h = 7; for (const ch of s) h = (h * 33 + ch.charCodeAt(0)) >>> 0; return h }
+const STATUS = {
+  working: { c: '#22d3ee', label: 'WORKING' },
+  waiting: { c: '#fbbf24', label: 'WAITING' },
+  idle: { c: '#94a3b8', label: 'IDLE' },
+  sleeping: { c: '#818cf8', label: 'ASLEEP' },
+}
+// Tool stations: where an agent travels to while it uses that kind of tool.
+const TOOLS = {
+  think: { label: 'Thinking', glyph: '✦', c: '#22d3ee' },
+  read: { label: 'Reading', glyph: '≡', c: '#60a5fa' },
+  edit: { label: 'Editing', glyph: '✎', c: '#4ade80' },
+  bash: { label: 'Terminal', glyph: '>_', c: '#f472b6' },
+  web: { label: 'Web', glyph: '⌕', c: '#fb923c' },
+  browser: { label: 'Browser', glyph: '◫', c: '#e879f9' },
+  agent: { label: 'Agents', glyph: '⚇', c: '#c084fc' },
+  other: { label: 'Tools', glyph: '⚙', c: '#94a3b8' },
+}
+const toolOf = t => (t === 'user' || !TOOLS[t] ? 'think' : t)
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
+const clip = (s, n) => (s.length > n ? s.slice(0, n - 1) + '…' : s)
+const rgba = (hex, a) => { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})` }
+const rand = (a, b) => a + Math.random() * (b - a)
+const money = n => (n >= 100 ? `$${Math.round(n)}` : `$${n.toFixed(2)}`)
+const kfmt = n => (n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k' : String(n))
+const store = { get: (k, d) => { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v) } catch { return d } },
+  set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)) } catch {} } }
+const timeStr = t => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+
+document.getElementById('legend').innerHTML =
+  Object.entries(STATUS).map(([k, s]) => `<span style="--c:${s.c}"><i></i>${k === 'sleeping' ? 'asleep' : k === 'waiting' ? 'waiting on you' : k}</span>`).join('') +
+  '<span class="sep"></span>' +
+  Object.values(TOOLS).map(t => `<span style="--c:${t.c}"><i></i>${t.label}</span>`).join('')
+
+// ===================== the neural network =====================
+const canvas = document.getElementById('net')
+const ctx = canvas.getContext('2d')
+let W = 0, H = 0, DPR = 1
+let neurons = []            // { x, y, fire, fireC, nb, phase }
+let edges = new Map()       // "a-b" -> { a, b, glow, color }
+let stations = {}           // tool -> neuron index
+const hubs = new Map()      // project -> neuron index
+let distCache = new Map()   // target neuron -> hop distances
+let signals = []
+const edgeKey = (a, b) => (a < b ? `${a}-${b}` : `${b}-${a}`)
+
+function nearestFree(x, y, taken) {
+  let best = 0, bd = Infinity
+  neurons.forEach((n, i) => {
+    if (taken.has(i)) return
+    const d = Math.hypot(n.x - x, n.y - y)
+    if (d < bd) { bd = d; best = i }
+  })
+  taken.add(best)
+  return best
+}
+
+function buildNetwork() {
+  const rect = canvas.getBoundingClientRect()
+  DPR = window.devicePixelRatio || 1
+  W = rect.width; H = rect.height
+  canvas.width = W * DPR; canvas.height = H * DPR
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0)
+
+  const top = 130, bottom = H - 140, left = 60, right = W - 60
+  const cols = Math.max(5, Math.round((right - left) / 92))
+  const rows = Math.max(4, Math.round((bottom - top) / 78))
+  const gx = (right - left) / (cols - 1), gy = (bottom - top) / (rows - 1)
+  neurons = []
+  const at = []
+  for (let c = 0; c < cols; c++) {
+    at[c] = []
+    for (let r = 0; r < rows; r++) {
+      const x = left + c * gx + rand(-gx, gx) * 0.2
+      const y = top + r * gy + (c % 2 ? gy * 0.3 : 0) + rand(-gy, gy) * 0.18
+      at[c][r] = neurons.length
+      neurons.push({ x, y, fire: 0, fireC: '#67e8f9', nb: [], phase: Math.random() * 6.28 })
+    }
+  }
+  edges = new Map()
+  const link = (a, b) => {
+    if (a === undefined || b === undefined || a === b) return
+    const k = edgeKey(a, b)
+    if (edges.has(k)) return
+    edges.set(k, { a, b, glow: 0, color: '#22d3ee' })
+    neurons[a].nb.push(b); neurons[b].nb.push(a)
+  }
+  for (let c = 0; c < cols; c++) for (let r = 0; r < rows; r++) {
+    const i = at[c][r]
+    if (r + 1 < rows) link(i, at[c][r + 1])
+    if (c + 1 < cols) {
+      link(i, at[c + 1][r])
+      if (r + 1 < rows && Math.random() < 0.5) link(i, at[c + 1][r + 1])
+      if (r > 0 && Math.random() < 0.35) link(i, at[c + 1][r - 1])
+    }
+  }
+
+  // tool stations on an outer ring, Thinking in the middle
+  const taken = new Set()
+  const cx = (left + right) / 2, cy = (top + bottom) / 2
+  const rx = (right - left) / 2 * 0.9, ry = (bottom - top) / 2 * 0.88
+  stations = { think: nearestFree(cx, cy, taken) }
+  const ring = ['bash', 'web', 'browser', 'agent', 'other', 'read', 'edit']
+  ring.forEach((t, k) => {
+    const a = -Math.PI / 2 + (k / ring.length) * Math.PI * 2
+    stations[t] = nearestFree(cx + Math.cos(a) * rx, cy + Math.sin(a) * ry, taken)
+  })
+  hubTaken = taken
+  hubs.clear()
+  distCache = new Map()
+  for (const a of agents.values()) resetAgent(a)
+}
+
+// project hubs sit on an inner ring between the stations
+let hubTaken = new Set()
+function hubFor(project) {
+  if (hubs.has(project)) return hubs.get(project)
+  const k = hubs.size
+  const top = 130, bottom = H - 140, left = 60, right = W - 60
+  const cx = (left + right) / 2, cy = (top + bottom) / 2
+  const a = -Math.PI / 2 + Math.PI / 7 + k * (Math.PI * 2 / 6) + Math.floor(k / 6) * 0.5
+  const rr = 0.5 + Math.floor(k / 6) * 0.12
+  const i = nearestFree(cx + Math.cos(a) * (right - left) / 2 * rr, cy + Math.sin(a) * (bottom - top) / 2 * rr, hubTaken)
+  hubs.set(project, i)
+  return i
+}
+
+function distTo(target) {
+  let d = distCache.get(target)
+  if (d) return d
+  d = new Array(neurons.length).fill(Infinity)
+  d[target] = 0
+  const q = [target]
+  while (q.length) {
+    const u = q.shift()
+    for (const v of neurons[u].nb) if (d[v] === Infinity) { d[v] = d[u] + 1; q.push(v) }
+  }
+  distCache.set(target, d)
+  return d
+}
+
+// ===================== walkers =====================
+// A walker hops neuron to neuron. mode 'go': head to target, then roam near it.
+// 'home': roam slowly near target. 'rest': go to target and stop there.
+function walker(node) { return { node, next: node, t: 1, x: neurons[node].x, y: neurons[node].y, trail: [], alpha: 1 } }
+
+function chooseNext(w, target, mode, roam) {
+  const d = distTo(target)
+  const here = d[w.node]
+  const nb = neurons[w.node].nb
+  if (mode === 'rest' && here === 0) return w.node
+  if (here > roam) {
+    const closer = nb.filter(j => d[j] < here)
+    return closer[(Math.random() * closer.length) | 0] ?? w.node
+  }
+  const near = nb.filter(j => d[j] <= roam)
+  return near[(Math.random() * near.length) | 0] ?? w.node
+}
+
+function stepWalker(w, target, mode, speed, color, dt, fires) {
+  if (w.t >= 1) {
+    w.node = w.next
+    if (fires) { const n = neurons[w.node]; n.fire = 1; n.fireC = color }
+    w.next = chooseNext(w, target, mode, mode === 'go' ? 2 : 1)
+    w.t = w.next === w.node ? 1 : 0
+    const e = edges.get(edgeKey(w.node, w.next))
+    if (e && fires) { e.glow = 1; e.color = color }
+  }
+  if (w.next !== w.node) w.t = Math.min(1, w.t + dt * speed)
+  const a = neurons[w.node], b = neurons[w.next]
+  const t = w.t, ease = t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2
+  w.x = a.x + (b.x - a.x) * ease
+  w.y = a.y + (b.y - a.y) * ease
+  if (fires) { w.trail.push([w.x, w.y]); if (w.trail.length > 22) w.trail.shift() }
+  else if (w.trail.length) w.trail.shift()
+}
+
+// ===================== agents =====================
+const agents = new Map()
+function resetAgent(a) {
+  const hub = hubFor(a.row.project)
+  a.main = walker(hub)
+  a.swarm = []
+  a.subs = []
+}
+function agentTarget(row) {
+  return row.status === 'working' ? stations[toolOf(row.tool)] : hubFor(row.project)
+}
+
+function updateAgent(a, dt) {
+  const row = a.row
+  const tool = toolOf(row.tool)
+  const tc = TOOLS[tool].c
+  const working = row.status === 'working'
+  const target = agentTarget(row)
+  const mode = working ? 'go' : row.status === 'sleeping' ? 'rest' : 'home'
+  const speed = working ? 2.3 : row.status === 'sleeping' ? 0.8 : row.status === 'waiting' ? 0.25 : 0.15
+  stepWalker(a.main, target, mode, speed, tc, dt, working)
+
+  // the swarm: extra dots that fly with a working agent to its station
+  const want = working ? 5 + Math.min(4, row.subagents.length * 2) : 0
+  while (a.swarm.filter(s => !s.leaving).length < want) {
+    const s = walker(a.main.node)
+    s.speed = rand(1.5, 3.2); s.leaving = false; s.alpha = 0; s.size = rand(1.6, 2.8)
+    a.swarm.push(s)
+  }
+  let extra = a.swarm.filter(s => !s.leaving).length - want
+  for (const s of a.swarm) if (extra > 0 && !s.leaving) { s.leaving = true; extra-- }
+  for (const s of a.swarm) {
+    if (s.leaving) {
+      stepWalker(s, a.main.node, 'rest', 3, tc, dt, false)
+      s.alpha -= dt * 0.8
+    } else {
+      s.alpha = Math.min(1, s.alpha + dt * 1.5)
+      stepWalker(s, target, 'go', s.speed, tc, dt, true)
+    }
+  }
+  a.swarm = a.swarm.filter(s => s.alpha > 0)
+
+  // subagents: purple walkers that go to their own tool's station
+  while (a.subs.length < row.subagents.length) a.subs.push(walker(a.main.node))
+  a.subs.length = row.subagents.length
+  a.subs.forEach((s, k) => {
+    const sa = row.subagents[k]
+    const st = sa.isActive ? stations[toolOf(sa.tool)] : a.main.node
+    stepWalker(s, st, sa.isActive ? 'go' : 'rest', sa.isActive ? 2 : 1, '#c084fc', dt, sa.isActive)
+  })
+}
+
+// ===================== drawing =====================
+let hovered = null, highlighted = null, last = performance.now(), clockT = 0
+
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000)
+  last = now
+  clockT += dt
+  if (replay.on && replay.playing) advanceReplay(dt)
+  ctx.clearRect(0, 0, W, H)
+  for (const a of agents.values()) updateAgent(a, dt)
+
+  if (Math.random() < dt * 7 && edges.size) {
+    const list = [...edges.values()]
+    const e = list[(Math.random() * list.length) | 0]
+    signals.push(Math.random() < .5 ? { a: e.a, b: e.b, t: 0, speed: rand(.4, .9) } : { a: e.b, b: e.a, t: 0, speed: rand(.4, .9) })
+  }
+
+  // edges
+  ctx.lineWidth = 1
+  ctx.strokeStyle = 'rgba(56, 78, 120, .2)'
+  ctx.beginPath()
+  for (const e of edges.values()) { const a = neurons[e.a], b = neurons[e.b]; ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y) }
+  ctx.stroke()
+  for (const e of edges.values()) {
+    if (e.glow < 0.02) continue
+    const a = neurons[e.a], b = neurons[e.b]
+    ctx.strokeStyle = rgba(e.color, e.glow * .7)
+    ctx.lineWidth = 1 + e.glow * 1.6
+    ctx.shadowColor = e.color; ctx.shadowBlur = 10 * e.glow
+    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke()
+    ctx.shadowBlur = 0; ctx.lineWidth = 1
+    e.glow *= Math.pow(0.3, dt)
+  }
+
+  // signals
+  signals = signals.filter(s => s.t < 1)
+  ctx.fillStyle = 'rgba(103, 232, 249, .5)'
+  for (const s of signals) {
+    s.t += dt * s.speed
+    const a = neurons[s.a], b = neurons[s.b]
+    ctx.beginPath(); ctx.arc(a.x + (b.x - a.x) * s.t, a.y + (b.y - a.y) * s.t, 1.5, 0, 6.29); ctx.fill()
+  }
+
+  // neurons
+  for (const n of neurons) {
+    const base = 2 + Math.sin(clockT * 1.3 + n.phase) * 0.5
+    if (n.fire > 0.02) {
+      ctx.fillStyle = rgba(n.fireC, n.fire * .22)
+      ctx.beginPath(); ctx.arc(n.x, n.y, base + 14 * (1 - n.fire) + 4, 0, 6.29); ctx.fill()
+      n.fire *= Math.pow(0.25, dt)
+    }
+    ctx.fillStyle = n.fire > .1 ? rgba(n.fireC, .5 + n.fire * .5) : 'rgba(71, 98, 145, .65)'
+    ctx.beginPath(); ctx.arc(n.x, n.y, base + n.fire * 2, 0, 6.29); ctx.fill()
+  }
+
+  drawStations()
+  drawHubs()
+
+  // swarms and subagents under the agents
+  for (const a of agents.values()) {
+    const tc = TOOLS[toolOf(a.row.tool)].c
+    for (const s of a.swarm) drawDot(s, tc, s.size, s.alpha)
+    a.subs.forEach((s, k) => drawDot(s, '#c084fc', 3.2, 1, a.row.subagents[k]?.isActive))
+  }
+  drawAgents()
+  if (mini.ctx) drawMini()
+  requestAnimationFrame(frame)
+}
+
+function drawStations() {
+  const visitors = {}
+  for (const a of agents.values()) if (a.row.status === 'working') { const t = toolOf(a.row.tool); visitors[t] = (visitors[t] ?? 0) + 1 }
+  for (const [tool, i] of Object.entries(stations)) {
+    const n = neurons[i], T = TOOLS[tool], busy = visitors[tool] ?? 0
+    const g = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, busy ? 90 : 55)
+    g.addColorStop(0, rgba(T.c, busy ? .2 : .08)); g.addColorStop(1, rgba(T.c, 0))
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(n.x, n.y, busy ? 90 : 55, 0, 6.29); ctx.fill()
+    // rotating dashed ring
+    ctx.save(); ctx.translate(n.x, n.y); ctx.rotate(clockT * (busy ? 1.2 : 0.25))
+    ctx.setLineDash([5, 6]); ctx.strokeStyle = rgba(T.c, busy ? .9 : .4); ctx.lineWidth = 1.5
+    ctx.beginPath(); ctx.arc(0, 0, 24, 0, 6.29); ctx.stroke(); ctx.restore(); ctx.setLineDash([])
+    if (busy) {
+      const p = (clockT * 1.1) % 1
+      ctx.strokeStyle = rgba(T.c, (1 - p) * .7); ctx.lineWidth = 2
+      ctx.beginPath(); ctx.arc(n.x, n.y, 24 + p * 26, 0, 6.29); ctx.stroke()
+    }
+    ctx.fillStyle = 'rgba(6, 10, 20, .9)'; ctx.strokeStyle = rgba(T.c, .9); ctx.lineWidth = 1.5
+    ctx.beginPath(); ctx.arc(n.x, n.y, 17, 0, 6.29); ctx.fill(); ctx.stroke()
+    ctx.fillStyle = T.c; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+    ctx.font = `700 ${T.glyph.length > 1 ? 12 : 16}px ui-monospace, Consolas, monospace`
+    ctx.fillText(T.glyph, n.x, n.y + 1)
+    ctx.textBaseline = 'alphabetic'
+    ctx.font = '700 11px ui-sans-serif, Segoe UI, sans-serif'
+    ctx.fillText(T.label.toUpperCase() + (busy ? ` · ${busy}` : ''), n.x, n.y + 40)
+    ctx.lineWidth = 1
+  }
+}
+
+function drawHubs() {
+  for (const [project, i] of hubs) {
+    const n = neurons[i], c = hue(project)
+    const list = [...agents.values()].filter(a => a.row.project === project)
+    const live = list.some(a => a.row.status === 'working')
+    const cost = list.reduce((s, a) => s + (a.row.cost || 0), 0)
+    const pulse = (clockT * (live ? .9 : .35)) % 1
+    ctx.strokeStyle = rgba(c, (1 - pulse) * (live ? .6 : .25)); ctx.lineWidth = 1.5
+    ctx.beginPath(); ctx.arc(n.x, n.y, 14 + pulse * 26, 0, 6.29); ctx.stroke()
+    // cost ring: a full circle is $50
+    ctx.strokeStyle = 'rgba(253, 230, 138, .15)'; ctx.lineWidth = 3
+    ctx.beginPath(); ctx.arc(n.x, n.y, 21, 0, 6.29); ctx.stroke()
+    if (cost > 0) {
+      ctx.strokeStyle = '#fde68a'; ctx.shadowColor = '#fbbf24'; ctx.shadowBlur = 8
+      ctx.beginPath(); ctx.arc(n.x, n.y, 21, -Math.PI / 2, -Math.PI / 2 + Math.min(1, cost / 50) * Math.PI * 2); ctx.stroke()
+      ctx.shadowBlur = 0
+    }
+    ctx.lineWidth = 1.5
+    ctx.fillStyle = rgba(c, .18); ctx.strokeStyle = rgba(c, .85)
+    ctx.beginPath(); ctx.arc(n.x, n.y, 13, 0, 6.29); ctx.fill(); ctx.stroke()
+    ctx.fillStyle = c; ctx.beginPath(); ctx.arc(n.x, n.y, 4.5, 0, 6.29); ctx.fill()
+    ctx.font = '800 12.5px ui-sans-serif, Segoe UI, sans-serif'; ctx.textAlign = 'center'
+    ctx.fillText(project.toUpperCase(), n.x, n.y + 38)
+    if (cost > 0) { ctx.font = '600 10.5px ui-monospace, Consolas, monospace'; ctx.fillStyle = '#fde68a'; ctx.fillText(money(cost), n.x, n.y + 51) }
+    ctx.lineWidth = 1
+    drawFiles(project, n, list)
+  }
+}
+
+// files the project's agents touched, orbiting its hub
+function drawFiles(project, n, list) {
+  const files = []
+  for (const a of list) for (const f of a.row.files ?? []) if (!files.some(x => x.path === f.path)) files.push({ ...f, agent: a })
+  files.sort((x, y) => x.ageS - y.ageS)
+  files.slice(0, 6).forEach(f => {
+    const ang = (hash(f.path) % 628) / 100 + clockT * 0.12
+    const r = 62 + (hash(f.name) % 3) * 9
+    const x = n.x + Math.cos(ang) * r, y = n.y + Math.sin(ang) * r * 0.8
+    const c = f.op === 'edit' ? TOOLS.edit.c : TOOLS.read.c
+    const hot = f.ageS < 15
+    if (hot) {
+      const src = f.agent.main
+      ctx.strokeStyle = rgba(c, .5); ctx.setLineDash([3, 4])
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(src.x, src.y); ctx.stroke(); ctx.setLineDash([])
+      ctx.shadowColor = c; ctx.shadowBlur = 14
+    }
+    ctx.fillStyle = rgba(c, hot ? 1 : .55)
+    const s = hot ? 8 : 6
+    ctx.beginPath(); ctx.roundRect(x - s / 2, y - s / 2, s, s, 2); ctx.fill()
+    ctx.shadowBlur = 0
+    if (hot || f.ageS < 120) {
+      ctx.font = '500 10px ui-monospace, Consolas, monospace'; ctx.textAlign = 'left'
+      ctx.fillStyle = rgba(c, hot ? .95 : .55)
+      ctx.fillText(clip(f.name, 22), x + 8, y + 3)
+    }
+  })
+}
+
+function drawDot(w, color, r, alpha = 1, busy = true) {
+  ctx.globalAlpha = Math.max(0, alpha)
+  if (w.trail.length > 1) {
+    for (let i = 1; i < w.trail.length; i++) {
+      const [x0, y0] = w.trail[i - 1], [x1, y1] = w.trail[i]
+      ctx.strokeStyle = rgba(color, (i / w.trail.length) * .55)
+      ctx.lineWidth = (i / w.trail.length) * r
+      ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke()
+    }
+    ctx.lineWidth = 1
+  }
+  ctx.fillStyle = rgba(color, busy ? .35 : .15)
+  ctx.beginPath(); ctx.arc(w.x, w.y, r * 2.6, 0, 6.29); ctx.fill()
+  ctx.fillStyle = color
+  ctx.beginPath(); ctx.arc(w.x, w.y, r, 0, 6.29); ctx.fill()
+  ctx.globalAlpha = 1
+}
+
+function drawAgents() {
+  const sleepers = new Map()
+  for (const a of agents.values()) {
+    const row = a.row, st = STATUS[row.status], w = a.main
+    const tc = TOOLS[toolOf(row.tool)].c
+    const focus = hovered === a || highlighted === row.id || drawerId === row.id
+    let x = w.x, y = w.y
+    if (row.status === 'sleeping' && w.node === hubFor(row.project) && w.t >= 1) {
+      const k = sleepers.get(row.project) ?? 0
+      sleepers.set(row.project, k + 1)
+      const ang = Math.PI * 0.75 + k * 0.9
+      x += Math.cos(ang) * 28; y += Math.sin(ang) * 28
+    }
+    a.drawX = x; a.drawY = y
+    const working = row.status === 'working'
+    // trail in the tool's colour
+    if (w.trail.length > 1) {
+      for (let i = 1; i < w.trail.length; i++) {
+        const [x0, y0] = w.trail[i - 1], [x1, y1] = w.trail[i]
+        ctx.strokeStyle = rgba(tc, (i / w.trail.length) * .8); ctx.lineWidth = (i / w.trail.length) * 6
+        ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke()
+      }
+      ctx.lineWidth = 1
+    }
+    const r = focus ? 8 : 6.5
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r * 4.5)
+    g.addColorStop(0, rgba(working ? tc : st.c, working ? .6 : .3)); g.addColorStop(1, rgba(st.c, 0))
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r * 4.5, 0, 6.29); ctx.fill()
+    ctx.fillStyle = st.c; ctx.beginPath(); ctx.arc(x, y, r, 0, 6.29); ctx.fill()
+    if (working) { ctx.fillStyle = tc; ctx.beginPath(); ctx.arc(x, y, r * .55, 0, 6.29); ctx.fill() }
+    ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.beginPath(); ctx.arc(x - r * .3, y - r * .3, r * .3, 0, 6.29); ctx.fill()
+
+    if (row.status === 'waiting') {
+      const p = (clockT * .6) % 1
+      ctx.strokeStyle = rgba(st.c, (1 - p) * .8); ctx.lineWidth = 1.4
+      ctx.beginPath(); ctx.arc(x, y, 8 + p * 18, 0, 6.29); ctx.stroke(); ctx.lineWidth = 1
+    }
+    if (row.status === 'sleeping') {
+      for (let z = 0; z < 3; z++) {
+        const p = ((clockT * .35) + z / 3) % 1
+        ctx.fillStyle = rgba(st.c, Math.sin(p * Math.PI) * .9)
+        ctx.font = `700 ${9 + z * 2}px ui-sans-serif, Segoe UI, sans-serif`; ctx.textAlign = 'left'
+        ctx.fillText('z', x + 8 + p * 12, y - 6 - p * 18)
+      }
+    }
+    if (focus) {
+      ctx.strokeStyle = st.c; ctx.lineWidth = 1.5
+      ctx.beginPath(); ctx.arc(x, y, 15, 0, 6.29); ctx.stroke(); ctx.lineWidth = 1
+    }
+    if (row.status !== 'sleeping' || focus) {
+      const text = clip(row.title, 26) + (working ? `  ·  ${TOOLS[toolOf(row.tool)].label}` : '')
+      ctx.font = '600 11.5px ui-sans-serif, Segoe UI, sans-serif'; ctx.textAlign = 'left'
+      const tw = ctx.measureText(text).width
+      ctx.fillStyle = 'rgba(5, 8, 15, .82)'
+      ctx.beginPath(); ctx.roundRect(x + 13, y - 9, tw + 14, 18, 9); ctx.fill()
+      ctx.strokeStyle = rgba(working ? tc : st.c, .55); ctx.stroke()
+      ctx.fillStyle = '#e2e8f0'; ctx.fillText(text, x + 20, y + 4)
+    }
+  }
+}
+
+// ===================== hover & click =====================
+const tip = document.getElementById('tip')
+function agentAt(mx, my) {
+  let best = null, bd = 22
+  for (const a of agents.values()) {
+    const d = Math.hypot((a.drawX ?? 0) - mx, (a.drawY ?? 0) - my)
+    if (d < bd) { bd = d; best = a }
+  }
+  return best
+}
+canvas.addEventListener('mousemove', ev => {
+  const r = canvas.getBoundingClientRect()
+  const mx = ev.clientX - r.left, my = ev.clientY - r.top
+  hovered = agentAt(mx, my)
+  if (hovered) {
+    const row = hovered.row, st = STATUS[row.status], T = TOOLS[toolOf(row.tool)]
+    tip.innerHTML = `<div class="t">${esc(row.title)}</div>
+      <div class="p"><b style="color:${hue(row.project)}">${esc(row.project)}</b> · <span style="color:${st.c}">${st.label}</span> · ${esc(row.ago)}</div>
+      ${row.status === 'working' ? `<div class="p">at <b style="color:${T.c}">${T.label}</b></div>` : ''}
+      <div class="d mono">${esc(row.doing)}</div>
+      <div class="p" style="font-size:11.5px">Click for details and reply</div>`
+    tip.style.left = Math.min(mx + 18, W - 320) + 'px'
+    tip.style.top = Math.min(my + 18, H - 200) + 'px'
+    tip.classList.add('on')
+  } else tip.classList.remove('on')
+  canvas.style.cursor = hovered ? 'pointer' : 'default'
+})
+canvas.addEventListener('mouseleave', () => { hovered = null; tip.classList.remove('on') })
+canvas.addEventListener('click', ev => {
+  const r = canvas.getBoundingClientRect()
+  const a = agentAt(ev.clientX - r.left, ev.clientY - r.top)
+  if (a) openDrawer(a.row.id); else closeDrawer()
+})
+
+// ===================== detail drawer =====================
+const drawer = document.getElementById('drawer')
+let drawerId = null, drawerSig = ''
+function openDrawer(id) { drawerId = id; drawerSig = ''; renderDrawer(); drawer.classList.add('on'); tip.classList.remove('on') }
+function closeDrawer() { drawerId = null; drawer.classList.remove('on') }
+function renderDrawer() {
+  if (!drawerId) return
+  const a = agents.get(drawerId)
+  if (!a) return closeDrawer()
+  const r = a.row, st = STATUS[r.status], T = TOOLS[toolOf(r.tool)]
+  const sig = JSON.stringify(r)
+  if (sig === drawerSig) return
+  const draft = drawer.querySelector('textarea')?.value ?? ''
+  const replyState = drawer.querySelector('.status')?.outerHTML ?? '<div class="status"></div>'
+  drawerSig = sig
+  drawer.innerHTML = `
+    <button class="x" id="dClose" title="Close">✕</button>
+    <h3>${esc(r.title)}</h3>
+    <div style="color:var(--muted)"><b style="color:${hue(r.project)}">${esc(r.project)}</b> · <span style="color:${st.c}">${st.label}</span> · ${esc(r.ago)}</div>
+    ${r.task ? `<div class="k">LAST ASK</div><div style="color:var(--muted)">“${esc(r.task)}”</div>` : ''}
+    <div class="k">${r.status === 'working' ? 'DOING NOW · ' + T.label.toUpperCase() : 'LAST STEP'}</div>
+    <div class="mono" style="color:${r.status === 'working' ? T.c : 'var(--muted)'};font-size:12.5px;word-break:break-word">${esc(r.doing)}</div>
+    <div class="k">NUMBERS</div>
+    <div class="grid">
+      <div class="cell"><b style="color:#fde68a">${money(r.cost || 0)}</b><span>spent this session</span></div>
+      <div class="cell"><b>${kfmt(r.tokensOut || 0)}</b><span>tokens written</span></div>
+      <div class="cell"><b style="color:#4ade80">+${kfmt(r.linesAdded || 0)}</b><span>lines added</span></div>
+      <div class="cell"><b style="color:#f87171">−${kfmt(r.linesRemoved || 0)}</b><span>lines removed</span></div>
+    </div>
+    ${(r.files ?? []).length ? `<div class="k">FILES</div>${r.files.map(f => `<div class="file"><i style="background:${f.op === 'edit' ? TOOLS.edit.c : TOOLS.read.c}"></i><span class="mono" title="${esc(f.path)}">${esc(f.name)}</span><em>${f.op} · ${f.ageS < 60 ? 'now' : Math.round(f.ageS / 60) + 'm'}</em></div>`).join('')}` : ''}
+    ${r.subagents.length ? `<div class="k">SUBAGENTS</div>${r.subagents.map(s => `<div class="file"><i style="background:#c084fc;border-radius:50%"></i><span>${esc(s.name)}</span><em class="mono">${esc(clip(s.doing, 30))}</em></div>`).join('')}` : ''}
+    <div class="k">REPLY</div>
+    <textarea id="dText" placeholder="Send this session a message…">${esc(draft)}</textarea>
+    <div class="acts">
+      <button class="primary" id="dSend">Send</button>
+      <button class="btn" id="dFolder">📂 Open folder</button>
+      <button class="btn" id="dCopy">⧉ Copy resume command</button>
+    </div>
+    ${replyState}
+    <div class="note">Replies go through the Agent Radar mod, so a Claude Code session with the mod on must be open. The session gets it as a message from Agent Radar.</div>`
+  drawer.querySelector('#dClose').onclick = closeDrawer
+  drawer.querySelector('#dSend').onclick = () => sendReply(r.id)
+  drawer.querySelector('#dFolder').onclick = () => post('/open-folder', { id: r.id }).catch(() => {})
+  drawer.querySelector('#dCopy').onclick = async ev => {
+    try { await navigator.clipboard.writeText(`cd "${r.cwd}"; claude --resume ${r.id}`); ev.target.textContent = '✓ Copied' } catch { ev.target.textContent = 'Copy failed' }
+  }
+}
+const post = (url, data) => fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', 'x-radar': '1' }, body: JSON.stringify(data) }).then(r => r.json())
+async function sendReply(id) {
+  const ta = drawer.querySelector('#dText'), st = drawer.querySelector('.status')
+  const text = ta.value.trim()
+  if (!text) return
+  st.innerHTML = '<span style="color:var(--muted)">Queued… waiting for the mod to send it</span>'
+  const { rid, error } = await post('/reply', { id, text }).catch(e => ({ error: String(e) }))
+  if (error) { st.innerHTML = `<span style="color:#f87171">${esc(error)}</span>`; return }
+  ta.value = ''
+  for (let i = 0; i < 30; i++) {
+    await new Promise(r => setTimeout(r, 1000))
+    const s = await fetch('/reply-status?rid=' + rid).then(r => r.json()).catch(() => ({}))
+    if ('ok' in s) {
+      const el = drawer.querySelector('.status')
+      if (el) el.innerHTML = s.ok ? '<span style="color:#4ade80">✓ Delivered to the session</span>' : `<span style="color:#f87171">Not delivered: ${esc(s.reason ?? 'unknown')}</span>`
+      return
+    }
+  }
+  const el = drawer.querySelector('.status')
+  if (el) el.innerHTML = '<span style="color:#fbbf24">Still waiting: is a Claude Code session with the Agent Radar mod open?</span>'
+}
+
+// ===================== sidebar & feed =====================
+const list = document.getElementById('list')
+const feed = document.getElementById('feed')
+const rowsEl = new Map()
+let first = true
+
+function addFeed(row, text, at = Date.now()) {
+  const li = document.createElement('li')
+  li.style.setProperty('--c', hue(row.project))
+  li.innerHTML = `<span class="when">${timeStr(at)} · ${esc(row.project)} · ${esc(clip(row.title, 30))}</span><span class="what mono">${esc(text)}</span>`
+  feed.prepend(li)
+  while (feed.children.length > 80) feed.lastChild.remove()
+}
+
+function rowHtml(r) {
+  const st = STATUS[r.status], T = TOOLS[toolOf(r.tool)]
+  return `<span class="dot"></span><span class="title">${esc(r.title)}</span><span class="badge">${st.label}</span>
+    <span class="sub"><span class="proj">${esc(r.project)}</span>${r.status === 'working' ? `<span class="tool">${T.label}</span>` : ''}<span class="doing mono">${esc(r.status === 'sleeping' ? 'asleep · ' + r.ago : r.doing)}</span>${r.cost ? `<span class="cost">${money(r.cost)}</span>` : ''}</span>
+    ${r.status === 'sleeping' ? '<span class="zz">z z</span>' : ''}`
+}
+
+function render(rows, at = Date.now()) {
+  const seen = new Set()
+  rows.forEach((r, k) => {
+    seen.add(r.id)
+    let a = agents.get(r.id)
+    if (!a) {
+      a = { row: r }
+      resetAgent(a)
+      agents.set(r.id, a)
+      if (!first) addFeed(r, 'joined the network', at)
+    } else {
+      const was = a.row
+      if (was.doing !== r.doing && r.status !== 'sleeping') addFeed(r, (r.status === 'working' ? TOOLS[toolOf(r.tool)].label + ' · ' : '') + r.doing, at)
+      if (was.status !== r.status) {
+        addFeed(r, r.status === 'sleeping' ? 'fell asleep' : was.status === 'sleeping' ? 'woke up' : `now ${STATUS[r.status].label.toLowerCase()}`, at)
+        if (r.status === 'waiting' && !replay.on) alertWaiting(r)
+      }
+      a.row = r
+    }
+    if (first && r.status === 'working') addFeed(r, r.doing, at)
+
+    let el = rowsEl.get(r.id)
+    if (!el) {
+      el = document.createElement('div')
+      el.addEventListener('mouseenter', () => { highlighted = r.id })
+      el.addEventListener('mouseleave', () => { highlighted = null })
+      el.addEventListener('click', () => openDrawer(r.id))
+      rowsEl.set(r.id, el)
+    }
+    const html = rowHtml(r)
+    if (el.dataset.html !== html) {
+      el.className = `row ${r.status}`
+      el.style.setProperty('--s', STATUS[r.status].c)
+      el.style.setProperty('--c', hue(r.project))
+      el.style.setProperty('--t', TOOLS[toolOf(r.tool)].c)
+      el.innerHTML = html
+      el.dataset.html = html
+    }
+    if (list.children[k] !== el) list.insertBefore(el, list.children[k] ?? null)
+  })
+  for (const [id, el] of rowsEl) if (!seen.has(id)) { el.remove(); rowsEl.delete(id) }
+  for (const id of [...agents.keys()]) if (!seen.has(id)) agents.delete(id)
+  const count = s => rows.filter(r => r.status === s).length
+  document.getElementById('nWork').textContent = count('working')
+  document.getElementById('nWait').textContent = count('waiting')
+  document.getElementById('nSleep').textContent = count('sleeping')
+  renderDrawer()
+  updateMiniList(rows)
+  first = false
+}
+
+// ===================== alerts =====================
+let alertsOn = store.get('radar.alerts', false)
+const bSound = document.getElementById('bSound')
+const paintSound = () => { bSound.classList.toggle('on', alertsOn); bSound.textContent = alertsOn ? '🔔 Alerts on' : '🔕 Alerts off' }
+paintSound()
+bSound.onclick = async () => {
+  alertsOn = !alertsOn
+  store.set('radar.alerts', alertsOn)
+  paintSound()
+  if (alertsOn) {
+    chime()
+    if ('Notification' in window && Notification.permission === 'default') { try { await Notification.requestPermission() } catch {} }
+  }
+}
+let audio
+function chime() {
+  try {
+    audio ??= new AudioContext()
+    const t0 = audio.currentTime
+    ;[[880, 0], [1318.5, 0.14], [1760, 0.28]].forEach(([f, d]) => {
+      const o = audio.createOscillator(), g = audio.createGain()
+      o.type = 'sine'; o.frequency.value = f
+      g.gain.setValueAtTime(0, t0 + d); g.gain.linearRampToValueAtTime(0.18, t0 + d + 0.02); g.gain.exponentialRampToValueAtTime(0.001, t0 + d + 0.9)
+      o.connect(g).connect(audio.destination); o.start(t0 + d); o.stop(t0 + d + 1)
+    })
+  } catch {}
+}
+function alertWaiting(r) {
+  if (!alertsOn) return
+  chime()
+  try {
+    if ('Notification' in window && Notification.permission === 'granted') {
+      const n = new Notification(`${r.title} needs you`, { body: `${r.project}: ${r.doing}`, tag: r.id, silent: true })
+      n.onclick = () => { window.focus(); openDrawer(r.id); n.close() }
+    }
+  } catch {}
+}
+
+// ===================== today summary =====================
+const modal = document.getElementById('modal'), sheet = document.getElementById('sheet')
+modal.addEventListener('click', e => { if (e.target === modal) modal.classList.remove('on') })
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { modal.classList.remove('on'); closeDrawer() } })
+document.getElementById('bToday').onclick = async () => {
+  const s = await fetch('/summary').then(r => r.json()).catch(() => null)
+  if (!s) return
+  const toolTotal = Object.values(s.tools).reduce((a, b) => a + b, 0) || 1
+  const projs = Object.entries(s.projects).sort((a, b) => b[1].minutes - a[1].minutes)
+  const maxMin = Math.max(1, ...projs.map(([, p]) => p.minutes))
+  const h = Math.floor(s.activeMinutes / 60), m = s.activeMinutes % 60
+  sheet.innerHTML = `
+    <button class="btn" style="position:absolute;right:18px;top:18px" onclick="document.getElementById('modal').classList.remove('on')">✕</button>
+    <h2>TODAY</h2>
+    <div class="sub">${new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}${s.busiest ? ` · busiest project: <b style="color:${hue(s.busiest)}">${esc(s.busiest)}</b>` : ''}</div>
+    <div class="tiles">
+      <div class="tile"><b>${h ? h + 'h ' : ''}${m}m</b><span>agent time</span></div>
+      <div class="tile"><b>${s.sessions}</b><span>sessions active</span></div>
+      <div class="tile"><b style="color:#fde68a">${money(s.cost)}</b><span>spent (session totals)</span></div>
+      <div class="tile"><b>${s.events}</b><span>steps taken</span></div>
+      <div class="tile"><b style="color:#4ade80">+${kfmt(s.linesAdded)}</b><span>lines added</span></div>
+      <div class="tile"><b>${s.filesChanged}</b><span>files changed</span></div>
+    </div>
+    <div class="k" style="color:var(--dim);font-size:11px;letter-spacing:.16em;margin:20px 0 4px;font-weight:700">WHAT THE AGENTS DID</div>
+    <div class="stack">${Object.entries(s.tools).sort((a, b) => b[1] - a[1]).map(([t, n]) => `<div title="${TOOLS[toolOf(t)].label}: ${n}" style="flex-grow:0;background:${TOOLS[toolOf(t)].c}" data-g="${n / toolTotal}"></div>`).join('')}</div>
+    <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:8px;font-size:12px;color:var(--muted)">${Object.entries(s.tools).sort((a, b) => b[1] - a[1]).map(([t, n]) => `<span><b style="color:${TOOLS[toolOf(t)].c}">■</b> ${t === 'user' ? 'Your messages' : TOOLS[toolOf(t)].label} ${Math.round(n / toolTotal * 100)}%</span>`).join('')}</div>
+    <div class="k" style="color:var(--dim);font-size:11px;letter-spacing:.16em;margin:20px 0 4px;font-weight:700">TIME BY PROJECT</div>
+    <div class="bars">${projs.map(([p, v]) => `<div class="bar"><span style="color:${hue(p)};font-weight:600">${esc(p)}</span><div class="track"><div class="fill" style="background:${hue(p)}" data-w="${v.minutes / maxMin * 100}"></div></div><em>${v.minutes}m · ${money(v.cost)}</em></div>`).join('')}</div>
+    ${s.topFiles.length ? `<div class="k" style="color:var(--dim);font-size:11px;letter-spacing:.16em;margin:20px 0 4px;font-weight:700">MOST EDITED FILES</div>
+    <div class="bars">${s.topFiles.map(f => `<div class="bar"><span class="mono" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(f.path)}">${esc(f.name)}</span><div class="track"><div class="fill" style="background:${TOOLS.edit.c}" data-w="${f.n / s.topFiles[0].n * 100}"></div></div><em>${f.n} edits</em></div>`).join('')}</div>` : ''}`
+  modal.classList.add('on')
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    sheet.querySelectorAll('[data-w]').forEach(el => { el.style.width = el.dataset.w + '%' })
+    sheet.querySelectorAll('[data-g]').forEach(el => { el.style.flexGrow = el.dataset.g })
+  }))
+}
+
+// ===================== mini overlay (always-on-top window) =====================
+const mini = { win: null, ctx: null, list: null }
+document.getElementById('bMini').onclick = async () => {
+  if (mini.win) { mini.win.close(); return }
+  let win
+  if ('documentPictureInPicture' in window) {
+    win = await documentPictureInPicture.requestWindow({ width: 340, height: 420 })
+  } else {
+    win = window.open('', 'radar-mini', 'width=340,height=420')
+    if (!win) return
+  }
+  win.document.body.innerHTML = `
+    <style>
+      body { margin: 0; background: #05080f; color: #e2e8f0; font: 12px/1.35 ui-sans-serif, Segoe UI, sans-serif; overflow: hidden; }
+      canvas { width: 100%; height: 190px; display: block; border-bottom: 1px solid #1c2740; }
+      .l { padding: 8px 10px; display: grid; gap: 6px; }
+      .r { display: grid; grid-template-columns: 10px 1fr; gap: 0 8px; align-items: center; }
+      .r i { width: 8px; height: 8px; border-radius: 50%; background: var(--s); box-shadow: 0 0 8px var(--s); }
+      .r.working i { animation: b 1s infinite; } .r.sleeping { opacity: .5; } .r.sleeping i { box-shadow: none }
+      .r b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+      .r span { grid-column: 2; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: ui-monospace, Consolas, monospace; font-size: 11px; }
+      .r.working span { color: var(--t); }
+      @keyframes b { 50% { opacity: .35 } }
+    </style>
+    <canvas id="m"></canvas><div class="l" id="l"></div>`
+  win.document.title = 'Agent Radar'
+  const c = win.document.getElementById('m')
+  mini.win = win; mini.ctx = c.getContext('2d'); mini.canvas = c; mini.list = win.document.getElementById('l')
+  updateMiniList([...agents.values()].map(a => a.row))
+  document.getElementById('bMini').classList.add('on')
+  win.addEventListener('pagehide', () => { mini.win = mini.ctx = mini.list = null; document.getElementById('bMini').classList.remove('on') })
+}
+function drawMini() {
+  const c = mini.canvas
+  const w = c.clientWidth, h = c.clientHeight
+  if (c.width !== w * 2) { c.width = w * 2; c.height = h * 2 }
+  const k = Math.min(c.width / canvas.width, c.height / canvas.height)
+  mini.ctx.fillStyle = '#05080f'; mini.ctx.fillRect(0, 0, c.width, c.height)
+  mini.ctx.drawImage(canvas, (c.width - canvas.width * k) / 2, (c.height - canvas.height * k) / 2, canvas.width * k, canvas.height * k)
+}
+function updateMiniList(rows) {
+  if (!mini.list) return
+  mini.list.innerHTML = rows.slice(0, 8).map(r => `<div class="r ${r.status}" style="--s:${STATUS[r.status].c};--t:${TOOLS[toolOf(r.tool)].c}"><i></i><b>${esc(r.title)}</b><span>${esc(r.status === 'sleeping' ? 'asleep · ' + r.project : (r.status === 'working' ? TOOLS[toolOf(r.tool)].label + ' · ' : '') + r.doing)}</span></div>`).join('')
+}
+
+// ===================== timeline & replay =====================
+const tl = document.getElementById('tl'), tctx = tl.getContext('2d')
+const replay = { on: false, playing: false, t: 0, speed: store.get('radar.speed', 120), data: null }
+let lastRows = []
+const tlWhen = document.getElementById('tlWhen'), bPlay = document.getElementById('bPlay'), bLive = document.getElementById('bLive'), bSpeed = document.getElementById('bSpeed')
+bSpeed.textContent = replay.speed + '×'
+bSpeed.onclick = () => { replay.speed = { 60: 120, 120: 300, 300: 600, 600: 60 }[replay.speed] ?? 120; store.set('radar.speed', replay.speed); bSpeed.textContent = replay.speed + '×' }
+
+async function loadTimeline() {
+  const d = await fetch('/timeline?h=6').then(r => r.json()).catch(() => null)
+  if (d) { replay.data = d; drawTimeline() }
+}
+async function startReplay(t) {
+  if (!replay.data || Date.now() - replay.data.to > 30e3) await loadTimeline()
+  if (!replay.data) return
+  if (!replay.on) { replay.on = true; feed.innerHTML = '' }
+  replay.t = Math.max(replay.data.from, Math.min(replay.data.to, t ?? replay.data.from))
+  paintReplay(); applyReplay(true)
+}
+function stopReplay() {
+  replay.on = false; replay.playing = false
+  for (const a of agents.values()) resetAgent(a)
+  render(lastRows)
+  paintReplay(); drawTimeline()
+}
+function paintReplay() {
+  bPlay.textContent = replay.playing ? '⏸ Pause' : '▶ Replay'
+  bLive.classList.toggle('on', !replay.on)
+  const live = document.getElementById('live')
+  live.classList.toggle('replay', replay.on)
+  live.querySelector('span').textContent = replay.on ? 'REPLAY' : 'LIVE'
+  tlWhen.textContent = replay.on ? timeStr(replay.t) : 'LIVE'
+}
+bPlay.onclick = async () => {
+  if (!replay.on) { await startReplay(); replay.playing = true }
+  else if (replay.t >= replay.data.to - 1000) { replay.t = replay.data.from; replay.playing = true }
+  else replay.playing = !replay.playing
+  paintReplay()
+}
+bLive.onclick = stopReplay
+
+let replayTick = 0
+function advanceReplay(dt) {
+  replay.t += dt * 1000 * replay.speed
+  if (replay.t >= replay.data.to) { replay.t = replay.data.to; replay.playing = false }
+  replayTick += dt
+  if (replayTick > 0.15) { replayTick = 0; applyReplay(); paintReplay(); drawTimeline() }
+}
+// Rebuild what every session looked like at replay.t from its event history.
+function applyReplay(jump) {
+  const T = replay.t
+  const liveById = new Map(lastRows.map(r => [r.id, r]))
+  const rows = []
+  for (const s of replay.data.sessions) {
+    let lo = 0, hi = s.events.length - 1, idx = -1
+    while (lo <= hi) { const mid = (lo + hi) >> 1; if (s.events[mid][0] <= T) { idx = mid; lo = mid + 1 } else hi = mid - 1 }
+    if (idx < 0) continue
+    const [ts, cat, desc, end] = s.events[idx]
+    const age = T - ts
+    const status = age < 75e3 && !end ? 'working' : age > 15 * 60e3 ? 'sleeping' : end ? 'waiting' : 'idle'
+    const live = liveById.get(s.id)
+    rows.push({ id: s.id, title: s.title, project: s.project, status, doing: desc, tool: cat, task: live?.task ?? '',
+      ago: age < 60e3 ? 'now' : age < 3600e3 ? Math.round(age / 60e3) + 'm ago' : Math.round(age / 3600e3) + 'h ago',
+      cost: live?.cost ?? 0, files: [], subagents: [], cwd: live?.cwd ?? '', tokensOut: live?.tokensOut, linesAdded: live?.linesAdded, linesRemoved: live?.linesRemoved, lastAt: ts })
+  }
+  const rank = { working: 0, waiting: 1, idle: 2, sleeping: 3 }
+  rows.sort((a, b) => rank[a.status] - rank[b.status] || b.lastAt - a.lastAt)
+  if (jump) for (const a of agents.values()) resetAgent(a)
+  render(rows, T)
+}
+
+function drawTimeline() {
+  const r = tl.getBoundingClientRect()
+  tl.width = r.width * DPR; tl.height = r.height * DPR
+  tctx.setTransform(DPR, 0, 0, DPR, 0, 0)
+  const w = r.width, h = r.height
+  tctx.clearRect(0, 0, w, h)
+  tctx.fillStyle = '#0a1122'; tctx.beginPath(); tctx.roundRect(0, 0, w, h, 8); tctx.fill()
+  const d = replay.data
+  if (!d) { tctx.fillStyle = '#64748b'; tctx.font = '12px Segoe UI'; tctx.fillText('Loading history…', 12, h / 2 + 4); return }
+  const span = d.to - d.from, N = 144, bw = w / N
+  const buckets = Array.from({ length: N }, () => ({}))
+  for (const s of d.sessions) for (const [ts, cat] of s.events) {
+    const b = Math.min(N - 1, Math.floor((ts - d.from) / span * N))
+    if (b >= 0) buckets[b][toolOf(cat)] = (buckets[b][toolOf(cat)] ?? 0) + 1
+  }
+  const max = Math.max(4, ...buckets.map(b => Object.values(b).reduce((a, c) => a + c, 0)))
+  const order = Object.keys(TOOLS)
+  buckets.forEach((b, i) => {
+    let y = h - 14
+    for (const t of order) {
+      if (!b[t]) continue
+      const bh = b[t] / max * (h - 22)
+      tctx.fillStyle = rgba(TOOLS[t].c, .85)
+      tctx.fillRect(i * bw + .5, y - bh, Math.max(1, bw - 1), bh)
+      y -= bh
+    }
+  })
+  // hour ticks
+  tctx.fillStyle = '#475569'; tctx.font = '10px ui-sans-serif, Segoe UI'
+  for (let t = Math.ceil(d.from / 3600e3) * 3600e3; t < d.to; t += 3600e3) {
+    const x = (t - d.from) / span * w
+    tctx.fillRect(x, h - 12, 1, 4)
+    tctx.fillText(new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), x + 3, h - 3)
+  }
+  // cursor
+  const cx = replay.on ? (replay.t - d.from) / span * w : w - 1
+  tctx.fillStyle = replay.on ? '#fbbf24' : '#22c55e'
+  tctx.fillRect(cx - 1, 0, 2, h - 12)
+  tctx.beginPath(); tctx.arc(cx, 4, 4, 0, 6.29); tctx.fill()
+}
+let dragging = false
+const scrubTo = ev => {
+  if (!replay.data) return
+  const r = tl.getBoundingClientRect()
+  const f = Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width))
+  if (f > 0.995) { if (replay.on) stopReplay(); return }
+  const t = replay.data.from + f * (replay.data.to - replay.data.from)
+  if (!replay.on) startReplay(t)
+  else { replay.t = t; applyReplay(true); paintReplay(); drawTimeline() }
+}
+tl.addEventListener('pointerdown', ev => { dragging = true; replay.playing = false; tl.setPointerCapture(ev.pointerId); scrubTo(ev) })
+tl.addEventListener('pointermove', ev => { if (dragging) scrubTo(ev) })
+tl.addEventListener('pointerup', () => { dragging = false; paintReplay() })
+
+// ===================== polling =====================
+const liveEl = document.getElementById('live')
+async function poll() {
+  try {
+    const { rows } = await fetch('/rows', { cache: 'no-store' }).then(r => r.json())
+    lastRows = rows
+    if (!replay.on) render(rows)
+    liveEl.classList.remove('off')
+    if (!replay.on) liveEl.querySelector('span').textContent = 'LIVE'
+  } catch {
+    liveEl.classList.add('off'); liveEl.querySelector('span').textContent = 'OFFLINE'
+  }
+}
+async function pollSummary() {
+  const s = await fetch('/summary').then(r => r.json()).catch(() => null)
+  if (s) document.getElementById('nCost').textContent = money(s.cost)
+}
+
+window.addEventListener('resize', () => { buildNetwork(); drawTimeline() })
+buildNetwork()
+poll(); setInterval(poll, 2000)
+pollSummary(); setInterval(pollSummary, 30e3)
+loadTimeline(); setInterval(() => { if (!replay.on) loadTimeline() }, 60e3)
+const tick = () => { document.getElementById('clock').textContent = timeStr(Date.now()) }
+tick(); setInterval(tick, 1000)
+requestAnimationFrame(frame)
+</script>
+</body>
+</html>
