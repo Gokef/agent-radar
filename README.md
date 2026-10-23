@@ -12,6 +12,7 @@ A live, animated view of every Claude Code session on your computer, drawn as a 
 - **Subagents:** purple dots that go to their own stations.
 - **Files:** the files each project's agents touched orbit its hub and flash when edited.
 - **Click an agent** for its cost, tokens, lines changed and files, plus a reply box, Open folder, and a copyable `claude --resume` command.
+- **🏁 Finish work** (in an agent's details): asks it to do a last tidy-up check (uncommitted changes, temp files, servers it started, anything half-done), fix only small safe things without committing, pushing or deleting, and give a short report. It shows as Finishing, then goes to sleep with its **Final report** in the drawer. New work wakes it up again.
 - **Done:** when an agent finishes, a green **✓ DONE** sign appears over it and on its row in the agent list, and the header counts finished agents. Click it to see the **full message** and reply. Turn on Alerts for a chime and a system notification; the Claude app also shows a toast.
 - **Reply from the overlay:** goes straight into that session. Only sessions open right now can get a reply; closed ones say so. **Open in Claude** jumps straight to that session in the app. Replies sent by the mod are blocked when the session running the radar is in auto mode; use Open in Claude there.
 - **Timeline:** activity bars for the last 6 hours. Drag or press Replay to watch the day back.

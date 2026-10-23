@@ -75,6 +75,8 @@
   .drawer .x { position: sticky; top: 0; float: right; margin: -6px -6px 0 8px; width: 34px; height: 34px; border-radius: 50%; background: #111a2e; border: 1px solid var(--line); color: var(--muted); font-size: 16px; z-index: 1; }
   .drawer .x:hover { color: var(--text); border-color: #334155; }
   .drawer .dmsg { max-height: 380px; overflow: auto; padding-right: 6px; }
+  .btn.finish { color: #d9f99d; border-color: #3f6212; }
+  .btn.finish:hover { border-color: #65a30d; background: #1a2e05aa; }
   a.btn { display: inline-flex; align-items: center; white-space: nowrap; text-decoration: none; }
   .row .newpill { display: none; margin-right: 6px; padding: 1px 6px; border-radius: 999px; background: var(--wait); color: #1a1205; font-size: 9px; letter-spacing: .08em; }
   .row.unread { border-color: #059669; box-shadow: 0 0 0 1px #10b98155, 0 0 22px #10b98133; animation: rise .45s cubic-bezier(.2, .8, .2, 1) both, glow 2.2s ease-in-out infinite; }
@@ -270,6 +272,8 @@ const TOOLS = {
   work: { label: 'Working', glyph: '◆', c: '#a3e635' },
   other: { label: 'Tools', glyph: '⚙', c: '#94a3b8' },
 }
+// the status as shown: finishing (wrapping up) and finished (asleep with a final report)
+const statusLabel = r => (r.finished ? '💤 FINISHED' : r.finishing ? '🏁 FINISHING' : STATUS[r.status].label)
 const toolOf = t => (t === 'user' || !TOOLS[t] ? 'think' : t)
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
 const clip = (s, n) => (s.length > n ? s.slice(0, n - 1) + '…' : s)
@@ -575,7 +579,7 @@ function drawAgents() {
         ctx.fillText('z', x + 7 + p * 10, y - 5 - p * 15)
       }
     }
-    if (row.status === 'waiting' || notes.has(row.id)) drawDone(x, y - 16, notes.has(row.id))
+    if (!row.finishing && (row.status === 'waiting' || notes.has(row.id))) drawDone(x, y - 16, notes.has(row.id))
     if (focus) { ctx.strokeStyle = st.c; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(x, y, 13, 0, 6.29); ctx.stroke(); ctx.lineWidth = 1 }
     // names only for agents doing something (or the one you point at), to keep it calm
     if (working || row.status === 'waiting' || focus) {
@@ -977,7 +981,7 @@ function drawAgents() {
     if (working) { ctx.fillStyle = tc; ctx.beginPath(); ctx.arc(x, y, r * .55, 0, 6.29); ctx.fill() }
     ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.beginPath(); ctx.arc(x - r * .3, y - r * .3, r * .3, 0, 6.29); ctx.fill()
 
-    if (row.status === 'waiting' || notes.has(row.id)) drawDone(x, y - 16, notes.has(row.id))
+    if (!row.finishing && (row.status === 'waiting' || notes.has(row.id))) drawDone(x, y - 16, notes.has(row.id))
     if (row.status === 'sleeping') {
       for (let z = 0; z < 3; z++) {
         const p = ((clockT * .35) + z / 3) % 1
@@ -1097,9 +1101,9 @@ function makeSimpleTheme() {
 
         // title and status
         const right = s.x + s.w - 16
-        ctx.textAlign = 'right'; ctx.font = '800 9.5px ui-sans-serif, Segoe UI, sans-serif'; ctx.fillStyle = st.c
-        ctx.fillText(st.label, right, ry + 21)
-        let badgeW = ctx.measureText(st.label).width
+        ctx.textAlign = 'right'; ctx.font = '800 9.5px ui-sans-serif, Segoe UI, sans-serif'; ctx.fillStyle = row.finishing ? TOOLS.work.c : st.c
+        ctx.fillText(statusLabel(row), right, ry + 21)
+        let badgeW = ctx.measureText(statusLabel(row)).width
         ctx.textAlign = 'left'; ctx.font = '650 12.5px ui-sans-serif, Segoe UI, sans-serif'
         ctx.fillStyle = row.status === 'sleeping' ? '#64748b' : unread ? '#a7f3d0' : '#e2e8f0'
         ctx.fillText(fit(row.title, right - badgeW - 12 - (s.x + 36)), s.x + 36, ry + 22)
@@ -1241,6 +1245,7 @@ function openDrawer(id) {
     <textarea id="dText" placeholder="Send this session a message… (Ctrl+Enter to send)"></textarea>
     <div class="acts">
       <button class="primary" id="dSend">Send</button>
+      <button class="btn finish" id="dFinish" title="Ask it to tidy up, report what it did, and go to sleep">🏁 Finish work</button>
       <a class="btn" id="dApp" hidden>↗ Open in Claude</a>
       <button class="btn" id="dFolder">📂 Open folder</button>
       <button class="btn" id="dCopy">⧉ Copy resume command</button>
@@ -1254,6 +1259,7 @@ function openDrawer(id) {
   drawer.querySelector('#dSend').onclick = dSend
   drawer.querySelector('#dText').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) dSend() })
   drawer.querySelector('#dFolder').onclick = () => post('/open-folder', { id }).catch(() => {})
+  drawer.querySelector('#dFinish').onclick = () => finishWork(id, () => drawerId === id && drawer.querySelector('.status'))
   drawer.querySelector('#dCopy').onclick = async ev => {
     const row = agents.get(id)?.row ?? r
     try { await navigator.clipboard.writeText(`cd "${row.cwd}"; claude --resume ${row.id}`); ev.target.textContent = '✓ Copied' } catch { ev.target.textContent = 'Copy failed' }
@@ -1276,11 +1282,11 @@ function renderDrawer() {
   if (!a) return closeDrawer()
   const r = a.row, st = STATUS[r.status], T = TOOLS[toolOf(r.tool)]
   setPart('head', `<h3>${esc(r.title)}</h3>
-    <div style="color:var(--muted)"><b style="color:${hue(r.project)}">${esc(r.project)}</b> · <span style="color:${st.c}">${st.label}</span> · ${esc(r.ago)}</div>`)
+    <div style="color:var(--muted)"><b style="color:${hue(r.project)}">${esc(r.project)}</b> · <span style="color:${r.finishing ? TOOLS.work.c : st.c}">${statusLabel(r)}</span> · ${esc(r.ago)}</div>`)
   setPart('ask', r.task ? `<div class="k">LAST ASK</div><div style="color:var(--muted)">“${esc(r.task)}”</div>` : '')
   setPart('doing', `<div class="k">${r.status === 'working' ? 'DOING NOW · ' + T.label.toUpperCase() : 'LAST STEP'}</div>
     <div class="mono" style="color:${r.status === 'working' ? T.c : 'var(--muted)'};font-size:12.5px;word-break:break-word">${esc(r.doing)}</div>`)
-  setPart('message', r.message ? `<div class="k">LAST MESSAGE${r.messageAt ? ' · ' + new Date(r.messageAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</div>
+  setPart('message', r.message ? `<div class="k">${r.finished ? '🏁 FINAL REPORT' : 'LAST MESSAGE'}${r.messageAt ? ' · ' + new Date(r.messageAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</div>
     <div class="md dmsg">${md(r.message)}</div>` : '')
   setPart('numbers', `<div class="k">NUMBERS</div>
     <div class="grid">
@@ -1295,6 +1301,7 @@ function renderDrawer() {
   setPart('cant', why ? `<div style="color:var(--dim);font-size:12.5px;margin-bottom:6px">${esc(why)}</div>` : '')
   drawer.querySelector('#dText').hidden = !!why
   drawer.querySelector('#dSend').hidden = !!why
+  drawer.querySelector('#dFinish').hidden = !!why || !!r.finishing || !!r.finished
   const app = drawer.querySelector('#dApp')
   app.hidden = !r.appLink
   if (r.appLink) app.href = r.appLink
@@ -1323,6 +1330,26 @@ async function sendReply(id, text, where) {
       const reason = /auto mode classifier/i.test(s.reason ?? '') ? 'auto mode in the session running the radar blocks replies sent by the mod.' + blockedHint : (s.reason ?? 'unknown')
       say(s.ok ? '<span style="color:#4ade80">✓ Delivered to the session</span>' : `<span style="color:#f87171">Not delivered: ${esc(reason)}</span>`)
       return !!s.ok
+    }
+  }
+  say('<span style="color:#fbbf24">Still waiting: is a Claude Code session with the Agent Radar mod open?</span>')
+  return false
+}
+
+async function finishWork(id, where) {
+  const st = () => (typeof where === 'function' ? where() : where)
+  const say = html => { const el = st(); if (el) el.innerHTML = html }
+  say('<span style="color:var(--muted)">Asking it to tidy up and write a short report…</span>')
+  const { rid, error } = await post('/finish', { id }).catch(e => ({ error: String(e) }))
+  if (error) { say(`<span style="color:#f87171">${esc(error)}</span>`); return false }
+  for (let i = 0; i < 30; i++) {
+    await new Promise(r => setTimeout(r, 1000))
+    const s = await fetch('/reply-status?rid=' + rid).then(r => r.json()).catch(() => ({}))
+    if ('ok' in s) {
+      if (s.ok) { say('<span style="color:#a3e635">🏁 Finishing up. Its report will show here, then it goes to sleep.</span>'); poll(); return true }
+      const reason = /auto mode classifier/i.test(s.reason ?? '') ? 'auto mode in the session running the radar blocks messages sent by the mod.' + blockedHint : (s.reason ?? 'unknown')
+      say(`<span style="color:#f87171">Couldn’t ask it to finish: ${esc(reason)}</span>`)
+      return false
     }
   }
   say('<span style="color:#fbbf24">Still waiting: is a Claude Code session with the Agent Radar mod open?</span>')
@@ -1379,8 +1406,8 @@ function addFeed(row, text, at = Date.now()) {
 
 function rowHtml(r) {
   const st = STATUS[r.status], T = TOOLS[toolOf(r.tool)]
-  return `<span class="dot"></span><span class="title">${esc(r.title)}</span><span class="badge">${st.label}</span>
-    <span class="sub"><span class="proj">${esc(r.project)}</span>${r.status === 'working' ? `<span class="tool">${T.label}</span>` : ''}<span class="doing mono">${esc(r.status === 'sleeping' ? 'asleep · ' + r.ago : r.doing)}</span>${r.cost ? `<span class="cost">${money(r.cost)}</span>` : ''}</span>
+  return `<span class="dot"></span><span class="title">${esc(r.title)}</span><span class="badge"${r.finishing ? ` style="color:${TOOLS.work.c}"` : ''}>${statusLabel(r)}</span>
+    <span class="sub"><span class="proj">${esc(r.project)}</span>${r.status === 'working' ? `<span class="tool">${T.label}</span>` : ''}<span class="doing mono">${esc(r.finished ? 'final report ready · ' + r.ago : r.status === 'sleeping' ? 'asleep · ' + r.ago : r.doing)}</span>${r.cost ? `<span class="cost">${money(r.cost)}</span>` : ''}</span>
     ${r.status === 'sleeping' ? '<span class="zz">z z</span>' : ''}`
 }
 
@@ -1404,9 +1431,12 @@ function render(rows, at = Date.now()) {
       // a new finished message: pop a notification card with the whole message and a reply box
       if (r.status === 'waiting' && (was.status !== 'waiting' || was.messageAt !== r.messageAt)) showNote(r, true)
       if (r.status === 'working' && notes.has(r.id)) markRead(r.id) // it carried on by itself
+      if (r.finished && !was.finished) { addFeed(r, '🏁 finished · final report ready', at); showNote(r, true) }
+      if (r.finishing && !was.finishing) addFeed(r, '🏁 finishing up', at)
       a.row = r
     }
     if (first && r.status === 'working') addFeed(r, r.doing, at)
+    if (first && !replay.on && r.finished && Date.now() - (r.reportAt || 0) < 30 * 60e3) showNote(r, false)
     // on opening the page, show agents that finished in the last 30 minutes (quietly)
     if (first && !replay.on && (r.status === 'waiting' || r.status === 'idle') && r.message && Date.now() - (r.messageAt || 0) < 30 * 60e3) showNote(r, false)
 
@@ -1482,7 +1512,7 @@ function alertWaiting(r) {
   try {
     if ('Notification' in window && Notification.permission === 'granted') {
       const body = plain(r.message || r.doing)
-      const n = new Notification(`✓ ${r.title} is done · ${r.project}`, { body: body.length > 300 ? body.slice(0, 299) + '…' : body, tag: r.id + ':' + r.messageAt, silent: true, requireInteraction: true })
+      const n = new Notification(`${r.finished ? '🏁 ' + r.title + ' finished · final report' : '✓ ' + r.title + ' is done'} · ${r.project}`, { body: body.length > 300 ? body.slice(0, 299) + '…' : body, tag: r.id + ':' + r.messageAt, silent: true, requireInteraction: true })
       // clicking it brings the radar forward with that agent's card ready to reply
       n.onclick = () => {
         window.focus(); n.close()
