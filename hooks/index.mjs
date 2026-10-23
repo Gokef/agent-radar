@@ -15,7 +15,9 @@ const CHUNK = 8 * 1024 * 1024
 export const category = name => {
   if (/^(Read|Glob|Grep|LS|NotebookRead)$/.test(name)) return 'read'
   if (/^(Edit|Write|MultiEdit|NotebookEdit)$/.test(name)) return 'edit'
-  if (/^(Bash|PowerShell|BashOutput|KillShell|Monitor)$/.test(name)) return 'bash'
+  if (/^(Bash|PowerShell|BashOutput|KillShell|Monitor)$|^mcp__terminal__/.test(name)) return 'bash'
+  // planning, task lists, questions and hand-offs: the agent working on the project itself
+  if (/^(TodoWrite|Task(Create|Update|List|Get|Stop)|AskUserQuestion|EnterPlanMode|ExitPlanMode|Skill|ToolSearch|SendUserFile|PushNotification|Artifact|ScheduleWakeup)$|^mcp__ccd_(turn|session)__|^mcp__1a59c906-/.test(name)) return 'work'
   if (/^(WebFetch|WebSearch)$/.test(name)) return 'web'
   if (/Browser|chrome|preview_/.test(name)) return 'browser'
   if (/^(Agent|Task|SendMessage)$|start_session/.test(name)) return 'agent'

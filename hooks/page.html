@@ -213,6 +213,7 @@ const TOOLS = {
   web: { label: 'Web', glyph: '⌕', c: '#fb923c' },
   browser: { label: 'Browser', glyph: '◫', c: '#e879f9' },
   agent: { label: 'Agents', glyph: '⚇', c: '#c084fc' },
+  work: { label: 'Working', glyph: '◆', c: '#a3e635' },
   other: { label: 'Tools', glyph: '⚙', c: '#94a3b8' },
 }
 const toolOf = t => (t === 'user' || !TOOLS[t] ? 'think' : t)
@@ -261,7 +262,7 @@ function buildNetwork() {
   canvas.width = W * DPR; canvas.height = H * DPR
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0)
 
-  const top = 130, bottom = H - 140, left = 60, right = W - 60
+  const top = 130, bottom = H - 180, left = 60, right = W - 60
   const cols = Math.max(5, Math.round((right - left) / 92))
   const rows = Math.max(4, Math.round((bottom - top) / 78))
   const gx = (right - left) / (cols - 1), gy = (bottom - top) / (rows - 1)
@@ -299,7 +300,7 @@ function buildNetwork() {
   const cx = (left + right) / 2, cy = (top + bottom) / 2
   const rx = (right - left) / 2 * 0.9, ry = (bottom - top) / 2 * 0.88
   stations = { think: nearestFree(cx, cy, taken) }
-  const ring = ['bash', 'web', 'browser', 'agent', 'other', 'read', 'edit']
+  const ring = ['bash', 'web', 'browser', 'agent', 'work', 'other', 'read', 'edit']
   ring.forEach((t, k) => {
     const a = -Math.PI / 2 + (k / ring.length) * Math.PI * 2
     stations[t] = nearestFree(cx + Math.cos(a) * rx, cy + Math.sin(a) * ry, taken)
@@ -315,7 +316,7 @@ let hubTaken = new Set()
 function hubFor(project) {
   if (hubs.has(project)) return hubs.get(project)
   const k = hubs.size
-  const top = 130, bottom = H - 140, left = 60, right = W - 60
+  const top = 130, bottom = H - 180, left = 60, right = W - 60
   const cx = (left + right) / 2, cy = (top + bottom) / 2
   const a = -Math.PI / 2 + Math.PI / 7 + k * (Math.PI * 2 / 6) + Math.floor(k / 6) * 0.5
   const rr = 0.5 + Math.floor(k / 6) * 0.12
