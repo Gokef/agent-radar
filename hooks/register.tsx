@@ -286,9 +286,15 @@ const scan = async ($: EngineInterface) => {
 // Replies typed on the localhost page are dropped in data/outbox by the
 // server; this sends each one to its session and records the result.
 const handled = new Set<string>()
+// The same folder the server uses: ~/.claude/agent-radar
+async function dataDir($: EngineInterface) {
+  const home = (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME')) ?? ''
+  return `${home.replace(/[\\/]+$/, '')}/.claude/agent-radar`
+}
 async function relayReplies($: EngineInterface) {
-  const outbox = `${$.plugin.root}/data/outbox`
-  const sent = `${$.plugin.root}/data/sent`
+  const data = await dataDir($)
+  const outbox = `${data}/outbox`
+  const sent = `${data}/sent`
   let entries
   try { entries = await $.fs.list(outbox) } catch { return }
   for (const f of entries) {
@@ -321,7 +327,7 @@ export const register: Register = on => {
     void scan($)
     $.clock.every(POLL_MS, () => scan($))
     $.clock.every(1500, () => relayReplies($))
-    void $.session.id().then(id => $.fs.write(`${$.plugin.root}/data/relay.json`, JSON.stringify({ sessionId: id }))).catch(() => {})
+    void Promise.all([$.session.id(), dataDir($)]).then(([id, data]) => $.fs.write(`${data}/relay.json`, JSON.stringify({ sessionId: id }))).catch(() => {})
     return started
   })
 

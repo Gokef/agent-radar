@@ -42,3 +42,14 @@ node hooks/server.mjs
 ```
 
 Replies typed on the page are sent by the mod, so they work while a Claude Code session with the mod turned on is open.
+
+### Start at login (Windows)
+
+Put a file named `Agent Radar.vbs` in your Startup folder (press Win+R, type `shell:startup`) with:
+
+```vbscript
+Set shell = CreateObject("WScript.Shell")
+shell.Run """C:\Program Files\nodejs\node.exe"" ""C:\path\to\agent-radar\hooks\server.mjs"" 47474", 0, False
+```
+
+It starts the radar quietly when you log in. Delete the file to stop that. Working data (replies waiting to be sent, finished agents) is kept in `~/.claude/agent-radar`.

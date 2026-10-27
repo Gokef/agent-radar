@@ -5,13 +5,17 @@ import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
+import { homedir } from 'node:os'
 import { Indexer } from './index.mjs'
 
 const PORT = Number(process.argv[2] || 47474)
 const here = dirname(fileURLToPath(import.meta.url))
+// Working data lives in one fixed folder, so the mod finds it whichever copy of the
+// server is running (for example the one started at login).
+const DATA = join(homedir(), '.claude', 'agent-radar')
 // Replies typed on the page wait here until the Claude Code mod sends them.
-const OUTBOX = join(here, '..', 'data', 'outbox')
-const SENT = join(here, '..', 'data', 'sent')
+const OUTBOX = join(DATA, 'outbox')
+const SENT = join(DATA, 'sent')
 mkdirSync(OUTBOX, { recursive: true })
 mkdirSync(SENT, { recursive: true })
 
@@ -31,7 +35,7 @@ const FINISH_PROMPT = [
 ].join('\n')
 
 // Sessions asked to finish: { [sessionId]: { at, rid, doneAt? } }, kept across restarts.
-const FINISHING = join(here, '..', 'data', 'finishing.json')
+const FINISHING = join(DATA, 'finishing.json')
 const loadFinishing = () => { try { return JSON.parse(readFileSync(FINISHING, 'utf8')) } catch { return {} } }
 const saveFinishing = f => writeFileSync(FINISHING, JSON.stringify(f))
 const sentResult = rid => { try { return JSON.parse(readFileSync(join(SENT, `${rid}.json`), 'utf8')) } catch { return null } }
@@ -128,7 +132,7 @@ const server = createServer(async (req, res) => {
   switch (url.pathname) {
     case '/rows': {
       let relayId = null
-      try { relayId = JSON.parse(readFileSync(join(here, '..', 'data', 'relay.json'), 'utf8')).sessionId } catch {}
+      try { relayId = JSON.parse(readFileSync(join(DATA, 'relay.json'), 'utf8')).sessionId } catch {}
       return json(res, { rows: applyFinishing(fresh().rows()), relayId })
     }
     case '/summary': return json(res, fresh().summary())
